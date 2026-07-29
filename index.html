@@ -319,6 +319,12 @@
     <div class="thresholds-note" style="margin-bottom:12px;">Visão experimental: os gráficos lado a lado, com a correlação de cada um em relação ao Lucro Líquido. Com poucos dias de dado (só 7 pontos), trate a correlação como uma pista, não uma prova — fica mais confiável conforme o histórico cresce.</div>
     <div class="thresholds-note" style="margin-bottom:12px;">Ainda sem diagnóstico automático.</div>
     <div id="analiseCharts"></div>
+
+    <div class="section-title">Ranking de correlação com o lucro</div>
+    <div class="card-block" id="analiseRanking"></div>
+
+    <div class="section-title">Resumo</div>
+    <div class="card-block" id="analiseResumo"></div>
   </div>
 
 </div>
@@ -1483,6 +1489,55 @@ function renderAnaliseCharts(){
     metricBlock('Taxa de conversão', lastTaxaConv, fmtPct, taxaConvPoints, 'var(--blue)', corrTaxaConv) +
     metricBlock('Ticket médio', lastTicketMedio, fmtReais2, ticketMedioPoints, 'var(--pink)', corrTicketMedio) +
     metricBlock('Pedidos', lastPedidos, fmtInt, pedidosPoints, 'var(--teal)', corrPedidos);
+
+  renderAnaliseRanking({
+    'Investimento ADS': { corr: corrInvest, esperada: 'negativa' },
+    'CPP geral': { corr: corrCpp, esperada: 'negativa' },
+    'Taxa de conversão': { corr: corrTaxaConv, esperada: 'positiva' },
+    'Ticket médio': { corr: corrTicketMedio, esperada: 'positiva' },
+    'Pedidos': { corr: corrPedidos, esperada: 'positiva' },
+  });
+}
+
+function renderAnaliseRanking(fatores){
+  const rankEl = document.getElementById('analiseRanking');
+  const resumoEl = document.getElementById('analiseResumo');
+
+  const lista = Object.entries(fatores)
+    .filter(([label,f])=>f.corr!=null)
+    .map(([label,f])=>{
+      const direcaoReal = f.corr>=0 ? 'positiva' : 'negativa';
+      const atipico = direcaoReal !== f.esperada && Math.abs(f.corr)>=0.4;
+      return { label, corr:f.corr, direcaoReal, atipico };
+    })
+    .sort((a,b)=>Math.abs(b.corr)-Math.abs(a.corr));
+
+  if(lista.length===0){
+    rankEl.innerHTML = '<div class="empty">Sem dados suficientes ainda.</div>';
+    resumoEl.innerHTML = '';
+    return;
+  }
+
+  rankEl.innerHTML = lista.map(f=>{
+    const abs = Math.abs(f.corr);
+    const forca = abs>=0.7?'forte':(abs>=0.4?'moderada':'fraca');
+    const cor = f.atipico ? 'var(--amber)' : (abs>=0.7 ? (f.corr>=0?'var(--teal)':'var(--red)') : 'var(--text-muted)');
+    return `<div class="metric-row"><span class="k">${f.label}${f.atipico?' ⚠️':''}</span><span class="v" style="color:${cor};">${f.corr>=0?'+':''}${f.corr.toFixed(2)} (${forca})</span></div>`;
+  }).join('');
+
+  const atipicos = lista.filter(f=>f.atipico);
+
+  const top = lista[0];
+  let frase = `O fator com correlação mais forte com o lucro foi <b>${top.label}</b> (${top.corr.toFixed(2)}). `;
+  const adsItem = lista.find(f=>f.label==='Investimento ADS');
+  if(adsItem && adsItem.label!==top.label){
+    const forcaAds = Math.abs(adsItem.corr)>=0.7?'forte':(Math.abs(adsItem.corr)>=0.4?'moderada':'fraca');
+    frase += `Investimento ADS teve correlação ${forcaAds} (${adsItem.corr.toFixed(2)})${forcaAds==='fraca' ? ' — sugere que não foi o principal motor dessa mudança' : ' — parece ter tido papel relevante também'}. `;
+  }
+  if(atipicos.length>0){
+    frase += `<br><br>⚠️ ${atipicos.map(f=>f.label).join(', ')} veio com direção diferente do esperado — provavelmente coincidência de calendário com o fator dominante, não causa direta. Vale mais confiança conforme o histórico crescer.`;
+  }
+  resumoEl.innerHTML = `<div style="font-size:13px;line-height:1.6;">${frase}</div>`;
 }
 
 // ---------- Init ----------
