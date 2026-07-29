@@ -1,0 +1,1498 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Painel de Gestão</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#0E1118">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg:#0E1118; --surface:#171C28; --surface-2:#1E2434; --border:#2A3145;
+    --text:#F2F4F9; --text-muted:#8A93AC;
+    --pink:#FF3D81; --teal:#17C3B2; --amber:#FFB238; --red:#FF5A5F; --blue:#4FA3FF;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;padding-bottom:84px;-webkit-font-smoothing:antialiased;}
+  h1,h2,h3,.display{font-family:'Sora',sans-serif;letter-spacing:-0.01em;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .app{max-width:480px;margin:0 auto;padding:20px 16px 8px;}
+  .header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;}
+  .header h1{font-size:20px;font-weight:700;margin:0;}
+  .header .tag{font-size:11px;color:var(--pink);font-weight:600;letter-spacing:0.08em;text-transform:uppercase;}
+
+  .seg{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:3px;margin-bottom:18px;}
+  .seg button{flex:1;background:none;border:none;color:var(--text-muted);padding:8px 4px;font-size:12.5px;font-weight:600;border-radius:9px;font-family:'Inter',sans-serif;cursor:pointer;}
+  .seg button.active{background:var(--pink);color:#fff;}
+
+  .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
+  .summary .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 10px;}
+  .summary .card .label{font-size:9.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;}
+  .summary .card .value{font-size:15px;font-weight:700;font-family:'JetBrains Mono',monospace;}
+  .summary .card .value.pink{color:var(--pink);}
+  .summary .card .value.teal{color:var(--teal);}
+  .summary .card .value.red{color:var(--red);}
+
+  .section-title{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin:22px 0 10px;}
+  .section-title:first-child{margin-top:0;}
+
+  .card-block{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:16px;}
+
+  .metric-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;}
+  .metric-row:last-child{border-bottom:none;}
+  .metric-row .k{color:var(--text-muted);}
+  .metric-row .v{font-family:'JetBrains Mono',monospace;font-weight:600;}
+  .metric-row .v.pink{color:var(--pink);} .metric-row .v.teal{color:var(--teal);} .metric-row .v.red{color:var(--red);}
+  .metric-row.plus .k::before{content:'+ ';color:var(--teal);}
+  .metric-row.minus .k::before{content:'– ';color:var(--red);}
+  .metric-row.eq{border-top:1px solid var(--border);font-weight:700;margin-top:2px;padding-top:9px;}
+  .metric-row.eq .k::before{content:'= ';color:var(--pink);}
+
+  .metric-block{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:8px;}
+  .metric-block .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
+  .metric-block .top .label{font-size:13px;font-weight:600;}
+  .metric-block .top .value{font-size:16px;font-weight:700;font-family:'JetBrains Mono',monospace;}
+  .spark-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:2px;}
+
+  .ad-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-bottom:12px;padding:14px 14px 14px 16px;position:relative;overflow:hidden;display:flex;gap:14px;align-items:center;cursor:pointer;}
+  .ad-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--status-color, var(--text-muted));}
+  .gauge{width:52px;height:52px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:conic-gradient(var(--status-color,#555) calc(var(--pct,0)*1%), var(--surface-2) 0);position:relative;}
+  .gauge::after{content:'';position:absolute;inset:5px;border-radius:50%;background:var(--surface);}
+  .gauge span{position:relative;font-size:11px;font-weight:700;font-family:'JetBrains Mono',monospace;}
+  .ad-info{flex:1;min-width:0;}
+  .ad-info .name{font-weight:600;font-size:14px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ad-info .metrics{display:flex;gap:12px;font-size:11.5px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;}
+  .ad-info .metrics b{color:var(--text);font-weight:600;}
+  .trend{font-size:16px;flex-shrink:0;}
+  .trend.up{color:var(--red);} .trend.down{color:var(--teal);} .trend.flat{color:var(--text-muted);}
+  .alert-box{font-size:12px;line-height:1.4;padding:9px 12px;border-radius:10px;margin-top:8px;background:var(--surface-2);border-left:3px solid var(--status-color,var(--text-muted));color:var(--text);}
+
+  .empty{text-align:center;color:var(--text-muted);font-size:13px;padding:40px 20px;border:1px dashed var(--border);border-radius:16px;}
+
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:11.5px;color:var(--text-muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;}
+  .field input, .field select{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 12px;font-size:14px;font-family:'JetBrains Mono',monospace;}
+  .field select{font-family:'Inter',sans-serif;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+
+  .btn{display:block;width:100%;text-align:center;background:var(--pink);color:#fff;border:none;padding:13px;border-radius:12px;font-weight:600;font-size:14px;font-family:'Sora',sans-serif;cursor:pointer;margin-top:4px;}
+  .btn:active{opacity:0.85;}
+  .btn.secondary{background:transparent;border:1px solid var(--border);color:var(--text);}
+  .btn.ghost{background:transparent;border:none;color:var(--red);font-size:12px;padding:6px;width:auto;margin:0;}
+
+  .row-item{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px;}
+  .row-item .name{flex:1;font-size:13.5px;font-weight:600;}
+  .row-item .meta{font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;}
+
+  .tabbar{position:fixed;bottom:0;left:0;right:0;background:rgba(23,28,40,0.94);backdrop-filter:blur(12px);border-top:1px solid var(--border);display:flex;max-width:480px;margin:0 auto;z-index:20;}
+  .tabbar button{flex:1;background:none;border:none;color:var(--text-muted);padding:10px 2px 9px;font-family:'Inter',sans-serif;font-size:9.5px;font-weight:500;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;}
+  .tabbar button .ic{font-size:16px;}
+  .tabbar button.active{color:var(--pink);}
+
+  .subtabs{display:flex;gap:6px;margin-bottom:16px;overflow-x:auto;}
+  .subtabs button{background:var(--surface);border:1px solid var(--border);color:var(--text-muted);padding:8px 14px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;}
+  .subtabs button.active{background:var(--pink);color:#fff;border-color:var(--pink);}
+
+  .view{display:none;}
+  .view.active{display:block;animation:fadein .2s ease;}
+  .subview{display:none;}
+  .subview.active{display:block;}
+  @keyframes fadein{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+
+  .toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%);background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:9px 16px;border-radius:20px;font-size:12.5px;opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;z-index:50;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px);}
+
+  .thresholds-note{font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:6px;}
+
+  .resumo-table{border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:11px;white-space:nowrap;}
+  .resumo-table th, .resumo-table td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--border);}
+  .resumo-table th{font-family:'Inter',sans-serif;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);font-weight:600;text-align:right;}
+  .resumo-table th:first-child, .resumo-table td:first-child{text-align:left;position:sticky;left:0;background:var(--bg);padding-right:14px;}
+  .resumo-table td:first-child{font-family:'Inter',sans-serif;font-weight:600;font-size:12px;color:var(--text);}
+  .resumo-table td.hl, .resumo-table th.hl{background:rgba(255,178,56,0.10);}
+  .resumo-table tr.totals td{font-weight:700;border-top:2px solid var(--border);border-bottom:none;color:var(--text);}
+
+  .loading-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px;z-index:100;}
+</style>
+</head>
+<body>
+
+<div class="loading-screen" id="loadingScreen">Carregando dados...</div>
+
+<div class="app">
+  <div class="header">
+    <h1>Painel de Gestão</h1>
+    <span class="tag">C4A · C2U</span>
+  </div>
+
+  <!-- Global store switcher (Receita / Despesas Fixas / Despesas Variáveis / ADS) -->
+  <div class="seg" id="storeSwitcher" style="display:none;">
+    <button data-store="c4a" class="active" onclick="setStore('c4a')">C4A</button>
+    <button data-store="c2u" onclick="setStore('c2u')">C2U</button>
+  </div>
+
+  <!-- ============ OVERVIEW ============ -->
+  <div id="view-overview" class="view active">
+    <div class="seg" id="painelViewSwitcher">
+      <button data-pv="c4a" class="active" onclick="setPainelView('c4a')">C4A</button>
+      <button data-pv="c2u" onclick="setPainelView('c2u')">C2U</button>
+      <button data-pv="all" onclick="setPainelView('all')">Consolidado</button>
+    </div>
+
+    <div id="dateWarning"></div>
+
+    <div class="summary">
+      <div class="card"><div class="label">Lucro líq. final (7d)</div><div class="value teal" id="pLucroFinal">—</div></div>
+      <div class="card"><div class="label">Margem líquida</div><div class="value pink" id="pMargemLiquida">—</div></div>
+      <div class="card"><div class="label">Projeção mensal</div><div class="value" id="pProjecao">—</div></div>
+    </div>
+
+    <div class="section-title">Evolução do lucro líquido</div>
+    <div id="lucroChart"></div>
+
+    <div class="section-title">Balanço (últimos 7 dias)</div>
+    <div class="card-block" id="balancoBreakdown"></div>
+
+    <div id="lucroRealBlock"></div>
+  </div>
+
+  <!-- ============ RECEITA ============ -->
+  <div id="view-receita" class="view">
+    <div class="section-title">Data de referência</div>
+    <div class="field">
+      <label>Data dos dados que você está lançando</label>
+      <input type="date" id="bData" onchange="loadReceitaForm()">
+    </div>
+    <div class="card-block">
+      <div class="field"><label>Vendas (R$)</label><input type="number" step="0.01" id="bVendas" placeholder="0,00"></div>
+      <div class="field"><label>Pedidos</label><input type="number" id="bPedidos" placeholder="0"></div>
+      <div class="field"><label>Ticket médio (R$)</label><input type="number" step="0.01" id="bTicketMedio" placeholder="0,00"></div>
+      <div class="field"><label>Taxa de conversão (%)</label><input type="number" step="0.01" id="bTaxaConversao" placeholder="0,00"></div>
+      <div class="field"><label>Líquido recebido da Shopee (R$, valor do dia)</label><input type="number" step="0.01" id="bLiquidoRecebido" placeholder="0,00"></div>
+    </div>
+    <button class="btn" onclick="saveReceita()">Salvar</button>
+
+    <div class="section-title">Evolução</div>
+    <div id="receitaCharts"></div>
+  </div>
+
+  <!-- ============ DESPESAS ============ -->
+  <div id="view-despesas" class="view">
+    <div class="subtabs">
+      <button data-dsub="fixas" class="active" onclick="setDespesasSub('fixas')">Fixas</button>
+      <button data-dsub="variaveis" onclick="setDespesasSub('variaveis')">Variáveis</button>
+      <button data-dsub="custos" onclick="setDespesasSub('custos')">Custos</button>
+    </div>
+
+    <div id="despesas-sub-fixas" class="subview active">
+      <div class="section-title">Data de referência (semana)</div>
+      <div class="field"><input type="date" id="eData" onchange="loadExpensesForm()"></div>
+      <div class="card-block">
+        <div class="field"><label>Salário Gabi (R$)</label><input type="number" step="0.01" id="eGabi" placeholder="0,00"></div>
+        <div class="field"><label>Softwares (R$)</label><input type="number" step="0.01" id="eSoftwares" placeholder="0,00"></div>
+        <div class="field"><label>Contador (R$)</label><input type="number" step="0.01" id="eContador" placeholder="0,00"></div>
+        <div class="field"><label>Pró-labore (R$)</label><input type="number" step="0.01" id="eProLabore" placeholder="0,00"></div>
+      </div>
+      <button class="btn" onclick="saveExpenses()">Salvar</button>
+
+      <div class="section-title">Histórico</div>
+      <div id="expensesHistory"></div>
+    </div>
+
+    <div id="despesas-sub-variaveis" class="subview">
+      <div class="section-title">Calculadas automaticamente (últimos 7 dias)</div>
+      <div class="thresholds-note" style="margin-bottom:8px;">Com base em Vendas e Pedidos lançados na aba Receita — não precisa digitar.</div>
+      <div class="card-block" id="autoDespesasBlock"></div>
+    </div>
+
+    <div id="despesas-sub-custos" class="subview">
+      <div class="section-title">Custos unitários desta loja</div>
+      <div class="thresholds-note" style="margin-bottom:8px;">Altere aqui quando o custo de produção ou as taxas da plataforma mudarem. Vale a partir de agora (não retroage nos lançamentos já feitos).</div>
+      <div class="card-block">
+        <div class="row2">
+          <div class="field"><label>Matéria-prima (R$/pedido)</label><input type="number" step="0.01" id="rMateriaPrima"></div>
+          <div class="field"><label>Embalagem/etiquetas (R$/pedido)</label><input type="number" step="0.01" id="rEmbalagem"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Tinta (R$/pedido)</label><input type="number" step="0.01" id="rTinta"></div>
+          <div class="field"><label>Imposto Simples (%)</label><input type="number" step="0.01" id="rImposto"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Comissão da plataforma (%)</label><input type="number" step="0.01" id="rComissao"></div>
+          <div class="field"><label>Taxa por item (R$/pedido)</label><input type="number" step="0.01" id="rPorItem"></div>
+        </div>
+        <div class="field"><label>Taxa de saque (%)</label><input type="number" step="0.01" id="rSaque"></div>
+      </div>
+      <button class="btn" onclick="saveRateConfig()">Salvar</button>
+      <button class="btn ghost" style="margin-top:8px;" onclick="resetRateConfig()">Restaurar padrão</button>
+    </div>
+  </div>
+
+  <!-- ============ PLAN ============ -->
+  <!-- ============ ADS ============ -->
+  <div id="view-ads" class="view">
+    <div class="subtabs">
+      <button data-sub="lancar" class="active" onclick="setAdsSub('lancar')">Lançar</button>
+      <button data-sub="resumo" onclick="setAdsSub('resumo')">Resumo</button>
+      <button data-sub="painel" onclick="setAdsSub('painel')">Painel</button>
+      <button data-sub="anuncios" onclick="setAdsSub('anuncios')">Anúncios</button>
+      <button data-sub="plan" onclick="setAdsSub('plan')">Plan</button>
+    </div>
+
+    <!-- ADS > Lançar -->
+    <div id="ads-sub-lancar" class="subview active">
+      <div class="field">
+        <label>Anúncio</label>
+        <select id="entryAdSelect" onchange="loadEntryFormForSelection()"></select>
+      </div>
+      <div class="field"><label>Investimento (R$)</label><input type="number" step="0.01" id="fInvestimento" placeholder="0,00"></div>
+      <div class="field"><label>Conversões (pedidos)</label><input type="number" id="fConversoes" placeholder="0"></div>
+      <div class="field"><label>Faturamento (R$)</label><input type="number" step="0.01" id="fVendas" placeholder="0,00"></div>
+      <div class="field"><label>ROAS (informado pela plataforma)</label><input type="number" step="0.01" id="fRoas" placeholder="0.00"></div>
+      <button class="btn" onclick="saveAdEntry()">Salvar</button>
+      <div class="thresholds-note">CPP = Investimento ÷ Conversões (calculado automaticamente). Usa a mesma data selecionada na aba Receita.</div>
+    </div>
+
+    <!-- ADS > Resumo -->
+    <div id="ads-sub-resumo" class="subview">
+      <div class="section-title">Últimos 7 dias por anúncio</div>
+      <div id="resumoTableWrap" style="overflow-x:auto; -webkit-overflow-scrolling:touch;"></div>
+    </div>
+
+    <!-- ADS > Painel (ranking + %ADS) -->
+    <div id="ads-sub-painel" class="subview">
+      <div class="section-title">Visão geral do ADS</div>
+      <div id="visaoGeral"></div>
+      <div class="section-title">Participação no faturamento ADS</div>
+      <div class="card-block" id="participacaoFaturamento"></div>
+      <div class="section-title">Ranking de anúncios</div>
+      <div id="adRanking"></div>
+    </div>
+
+    <!-- ADS > Anúncios (cadastro) -->
+    <div id="ads-sub-anuncios" class="subview">
+      <div class="section-title">Seus anúncios</div>
+      <div id="adList"></div>
+
+      <div class="section-title">Novo anúncio</div>
+      <div class="field"><label>Nome do anúncio</label><input type="text" id="newAdName" placeholder="Ex: Fundo Azul"></div>
+      <div class="field">
+        <label>Meta de ROAS</label>
+        <select id="newAdRoasMode" onchange="toggleRoasMode()">
+          <option value="manual">Manual</option>
+          <option value="auto">Automático</option>
+        </select>
+      </div>
+      <div class="row2">
+        <div class="field" id="metaRoasField"><label>Meta de ROAS</label><input type="number" step="0.1" id="newAdMetaRoas" placeholder="8.0"></div>
+        <div class="field"><label>Sensibilidade do gatilho (%)</label><input type="number" id="newAdSens" placeholder="15" value="15"></div>
+      </div>
+      <button class="btn secondary" id="adFormBtn" onclick="addAd()">Adicionar anúncio</button>
+      <button class="btn ghost" id="cancelEditBtn" style="display:none;margin-top:6px;" onclick="cancelEditAd()">Cancelar edição</button>
+    </div>
+
+    <!-- ADS > Plan -->
+    <div id="ads-sub-plan" class="subview">
+      <div class="section-title">Meta de lucro líquido</div>
+      <div class="field"><label>Lucro líquido desejado (R$, últimos 7 dias)</label><input type="number" step="0.01" id="planMeta" placeholder="0,00"></div>
+      <button class="btn" onclick="savePlan()">Salvar meta</button>
+
+      <div class="section-title">Parâmetros atuais (últimos lançamentos)</div>
+      <div class="card-block" id="planParams"></div>
+
+      <div class="section-title">Cenários para atingir a meta</div>
+      <div id="planScenarios"></div>
+      <div class="thresholds-note">Assume que CPP, % de pedidos via ADS e Ticket Médio se mantêm nos níveis atuais ao escalar o investimento. Na prática, CPP tende a piorar quando o orçamento sobe muito — por isso os 3 cenários, não um número só.</div>
+    </div>
+  </div>
+
+  <!-- ============ ANÁLISE (teste) ============ -->
+  <div id="view-analise" class="view">
+    <div class="thresholds-note" style="margin-bottom:12px;">Visão experimental: os gráficos lado a lado, com a correlação de cada um em relação ao Lucro Líquido. Com poucos dias de dado (só 7 pontos), trate a correlação como uma pista, não uma prova — fica mais confiável conforme o histórico cresce.</div>
+    <div class="thresholds-note" style="margin-bottom:12px;">Ainda sem diagnóstico automático.</div>
+    <div id="analiseCharts"></div>
+  </div>
+
+</div>
+
+<div class="tabbar">
+  <button data-view="overview" class="active" onclick="switchView('overview')"><span class="ic">📊</span>Overview</button>
+  <button data-view="receita" onclick="switchView('receita')"><span class="ic">💵</span>Receita</button>
+  <button data-view="despesas" onclick="switchView('despesas')"><span class="ic">🧾</span>Despesas</button>
+  <button data-view="ads" onclick="switchView('ads')"><span class="ic">📣</span>ADS</button>
+  <button data-view="analise" onclick="switchView('analise')"><span class="ic">🔍</span>Análise</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ---------- Firebase ----------
+const firebaseConfig = {
+  apiKey: "AIzaSyDpGC5ES3-vWws3n1mj7VlwZLIXHtu7ZtM",
+  authDomain: "dashboard-marketplaces-stores.firebaseapp.com",
+  projectId: "dashboard-marketplaces-stores",
+  storageBucket: "dashboard-marketplaces-stores.firebasestorage.app",
+  messagingSenderId: "977880043712",
+  appId: "1:977880043712:web:ed78ecaf323b8922841d25",
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ---------- Global state ----------
+let STORE = 'c4a';
+let PAINEL_VIEW = 'c4a';
+let expandedAdId = null;
+let editingAdId = null;
+
+let CACHE = { ads: [], adEntries: [], dailyBusiness: [], weeklyExpenses: [], plans: [], rateConfig: {} };
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200);
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function numOr(def,id){
+  const v = parseFloat(document.getElementById(id).value);
+  return isNaN(v) ? def : v;
+}
+
+// ---------- Load / persist ----------
+async function loadAllData(){
+  try{
+    const [adsSnap, entriesSnap, bizSnap, expSnap, plansSnap, rateSnap] = await Promise.all([
+      db.collection('ads').get(),
+      db.collection('adEntries').get(),
+      db.collection('dailyBusiness').get(),
+      db.collection('weeklyExpenses').get(),
+      db.collection('plans').get(),
+      db.collection('rateConfig').get(),
+    ]);
+    CACHE.ads = adsSnap.docs.map(d=>({ id:d.id, ...d.data() }));
+    CACHE.adEntries = entriesSnap.docs.map(d=>({ id:d.id, ...d.data() }));
+    CACHE.dailyBusiness = bizSnap.docs.map(d=>({ id:d.id, ...d.data() }));
+    CACHE.weeklyExpenses = expSnap.docs.map(d=>({ id:d.id, ...d.data() }));
+    CACHE.plans = plansSnap.docs.map(d=>({ id:d.id, ...d.data() }));
+    CACHE.rateConfig = {};
+    rateSnap.docs.forEach(d=>{ CACHE.rateConfig[d.id] = d.data(); });
+  }catch(e){
+    showToast('Erro ao carregar dados. Verifique sua conexão.');
+    console.error(e);
+  }
+  document.getElementById('loadingScreen').style.display = 'none';
+  document.getElementById('bData').valueAsDate = new Date(Date.now() - 86400000);
+  document.getElementById('eData').valueAsDate = new Date();
+  renderEverything();
+}
+
+function renderEverything(){
+  renderPainel();
+  loadReceitaForm();
+  renderAdSelect();
+  loadEntryFormForSelection();
+  renderResumo();
+  renderAdsPainel();
+  renderAdManageList();
+  loadExpensesForm();
+  renderExpensesHistory();
+  renderAutoDespesasBlock();
+  loadRateConfigForm();
+  renderPlan();
+  renderAnaliseCharts();
+}
+
+// ---------- Navigation ----------
+function switchView(name){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  document.querySelectorAll('.tabbar button').forEach(b=>b.classList.remove('active'));
+  document.querySelector(`.tabbar button[data-view="${name}"]`).classList.add('active');
+  document.getElementById('storeSwitcher').style.display = (name==='overview') ? 'none' : 'flex';
+  if(name==='receita') loadReceitaForm();
+  if(name==='despesas'){ loadExpensesForm(); renderExpensesHistory(); renderAutoDespesasBlock(); }
+  if(name==='ads'){ renderAdSelect(); loadEntryFormForSelection(); renderResumo(); renderAdsPainel(); renderAdManageList(); }
+  if(name==='overview') renderPainel();
+  if(name==='analise') renderAnaliseCharts();
+}
+
+function setDespesasSub(name){
+  document.querySelectorAll('#view-despesas .subtabs button').forEach(b=>b.classList.toggle('active', b.dataset.dsub===name));
+  document.querySelectorAll('#view-despesas .subview').forEach(v=>v.classList.remove('active'));
+  document.getElementById('despesas-sub-'+name).classList.add('active');
+  if(name==='custos') loadRateConfigForm();
+}
+
+function setStore(s){
+  STORE = s;
+  document.querySelectorAll('#storeSwitcher button').forEach(b=>b.classList.toggle('active', b.dataset.store===s));
+  loadReceitaForm();
+  renderAdSelect();
+  loadEntryFormForSelection();
+  renderResumo();
+  renderAdsPainel();
+  renderAdManageList();
+  loadExpensesForm();
+  renderExpensesHistory();
+  renderAutoDespesasBlock();
+  loadRateConfigForm();
+  renderPlan();
+  renderAnaliseCharts();
+}
+
+function setPainelView(v){
+  PAINEL_VIEW = v;
+  document.querySelectorAll('#painelViewSwitcher button').forEach(b=>b.classList.toggle('active', b.dataset.pv===v));
+  renderPainel();
+}
+
+function setAdsSub(name){
+  document.querySelectorAll('.subtabs button').forEach(b=>b.classList.toggle('active', b.dataset.sub===name));
+  document.querySelectorAll('#view-ads .subview').forEach(v=>v.classList.remove('active'));
+  document.getElementById('ads-sub-'+name).classList.add('active');
+  if(name==='resumo') renderResumo();
+  if(name==='painel') renderAdsPainel();
+  if(name==='anuncios') renderAdManageList();
+  if(name==='lancar'){ renderAdSelect(); loadEntryFormForSelection(); }
+  if(name==='plan') renderPlan();
+}
+
+// ---------- Sparkline ----------
+function sparklineSVG(points, color){
+  const valid = points.filter(p=>p.val!=null && !isNaN(p.val));
+  if(valid.length<2){
+    return `<div style="font-size:11px;color:var(--text-muted);padding:6px 0;">Aguardando mais dados para o gráfico.</div>`;
+  }
+  const w=280, h=64, padX=6, padY=8;
+  const vals = valid.map(p=>p.val);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const range = (max-min) || Math.max(1, Math.abs(max)*0.1) || 1;
+  const stepX = (w - padX*2) / (valid.length-1);
+  const coords = valid.map((p,i)=>{
+    const x = padX + i*stepX;
+    const y = padY + (1 - (p.val-min)/range) * (h - padY*2);
+    return {x,y,label:p.label};
+  });
+  const pathD = coords.map((c,i)=> (i===0?'M':'L')+c.x.toFixed(1)+','+c.y.toFixed(1)).join(' ');
+  const areaD = pathD + ` L${coords[coords.length-1].x.toFixed(1)},${h-padY} L${coords[0].x.toFixed(1)},${h-padY} Z`;
+  const dots = coords.map(c=>`<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="2.6" fill="${color}"/>`).join('');
+  const firstLabel = (valid[0].label||'').slice(5);
+  const lastLabel = (valid[valid.length-1].label||'').slice(5);
+  return `
+    <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" style="display:block;">
+      <path d="${areaD}" fill="${color}" opacity="0.12" stroke="none"/>
+      <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${dots}
+    </svg>
+    <div class="spark-labels"><span>${firstLabel}</span><span>${lastLabel}</span></div>
+  `;
+}
+function metricBlock(label, currVal, fmtFn, points, color, corr){
+  const corrHtml = (corr!=null) ? renderCorrBadge(corr) : '';
+  return `
+    <div class="metric-block">
+      <div class="top"><span class="label">${label}</span><span class="value">${currVal==null?'—':fmtFn(currVal)}</span></div>
+      ${sparklineSVG(points, color)}
+      ${corrHtml}
+    </div>
+  `;
+}
+
+function renderCorrBadge(r){
+  const abs = Math.abs(r);
+  const forca = abs>=0.7 ? 'forte' : (abs>=0.4 ? 'moderada' : 'fraca');
+  const direcao = r>=0 ? 'positiva' : 'negativa';
+  const cor = abs>=0.7 ? (r>=0?'var(--teal)':'var(--red)') : 'var(--text-muted)';
+  return `<div style="font-size:10.5px;color:${cor};margin-top:6px;border-top:1px solid var(--border);padding-top:6px;">Correlação com o lucro: <b>${r.toFixed(2)}</b> (${forca}, ${direcao})</div>`;
+}
+
+// Correlação de Pearson entre duas séries {label,val}, casando pelas datas em comum. Precisa de pelo menos 3 pontos.
+function pearsonCorrelation(pointsA, pointsB){
+  const mapB = {};
+  pointsB.forEach(p=>{ if(p.val!=null) mapB[p.label]=p.val; });
+  const pairs = [];
+  pointsA.forEach(p=>{ if(p.val!=null && mapB[p.label]!=null) pairs.push([p.val, mapB[p.label]]); });
+  if(pairs.length<3) return null;
+  const n = pairs.length;
+  const mx = pairs.reduce((s,p)=>s+p[0],0)/n;
+  const my = pairs.reduce((s,p)=>s+p[1],0)/n;
+  let num=0, dx2=0, dy2=0;
+  pairs.forEach(([x,y])=>{ const dx=x-mx, dy=y-my; num+=dx*dy; dx2+=dx*dx; dy2+=dy*dy; });
+  if(dx2===0 || dy2===0) return null;
+  return num/Math.sqrt(dx2*dy2);
+}
+
+// ================= RECEITA =================
+function bizId(store,date){ return `${store}_${date}`; }
+
+function loadReceitaForm(){
+  const date = document.getElementById('bData').value;
+  const existing = CACHE.dailyBusiness.find(b=>b.store===STORE && b.date===date);
+  const fields = { bVendas:'vendas', bPedidos:'pedidos', bTicketMedio:'ticketMedio', bTaxaConversao:'taxaConversao', bLiquidoRecebido:'liquidoRecebido' };
+  Object.keys(fields).forEach(id=>{
+    document.getElementById(id).value = existing ? (existing[fields[id]] || '') : '';
+  });
+  renderReceitaCharts();
+}
+
+function renderReceitaCharts(){
+  const el = document.getElementById('receitaCharts');
+  const dates = last7BizDates(STORE);
+  if(dates.length===0){ el.innerHTML = '<div class="empty">Sem registros ainda.</div>'; return; }
+  const recs = dates.map(d=>{
+    const list = bizForDate(STORE,d);
+    return list.length ? list[0] : null;
+  });
+  const last = recs[recs.length-1];
+  const fmtReais = v => 'R$ '+v.toFixed(2);
+  const fmtInt = v => v.toFixed(0);
+  const fmtPct = v => v.toFixed(2)+'%';
+  const pts = (key) => dates.map((d,i)=>({ label:d, val: recs[i] ? recs[i][key] : null }));
+  const liquidoPoints = pts('liquidoRecebido');
+  const liquidoAcumulado = liquidoPoints.reduce((s,p)=> s + (p.val||0), 0);
+  el.innerHTML =
+    metricBlock('Vendas', last?last.vendas:null, fmtReais, pts('vendas'), 'var(--pink)') +
+    metricBlock('Pedidos', last?last.pedidos:null, fmtInt, pts('pedidos'), 'var(--amber)') +
+    metricBlock('Ticket médio', last?last.ticketMedio:null, fmtReais, pts('ticketMedio'), 'var(--teal)') +
+    metricBlock('Taxa de conversão', last?last.taxaConversao:null, fmtPct, pts('taxaConversao'), 'var(--blue)') +
+    metricBlock('Líquido recebido (acumulado)', liquidoAcumulado, fmtReais, liquidoPoints, 'var(--red)');
+}
+
+async function saveReceita(){
+  const date = document.getElementById('bData').value;
+  if(!date){ showToast('Escolha uma data.'); return; }
+  const data = {
+    store: STORE, date,
+    vendas: numOr(0,'bVendas'),
+    pedidos: numOr(0,'bPedidos'),
+    ticketMedio: numOr(0,'bTicketMedio'),
+    taxaConversao: numOr(0,'bTaxaConversao'),
+    liquidoRecebido: numOr(0,'bLiquidoRecebido'),
+  };
+  const id = bizId(STORE,date);
+  try{
+    await db.collection('dailyBusiness').doc(id).set(data);
+    CACHE.dailyBusiness = CACHE.dailyBusiness.filter(b=>b.id!==id);
+    CACHE.dailyBusiness.push({id, ...data});
+    showToast('Registro salvo.');
+    renderPainel();
+    renderAdsPainel();
+    renderAutoDespesasBlock();
+    renderReceitaCharts();
+  }catch(e){ showToast('Erro ao salvar.'); console.error(e); }
+}
+
+// ================= ADS: anúncios (cadastro) =================
+function toggleRoasMode(){
+  const mode = document.getElementById('newAdRoasMode').value;
+  document.getElementById('metaRoasField').style.display = (mode==='auto') ? 'none' : 'block';
+}
+function editAd(id){
+  const ad = CACHE.ads.find(a=>a.id===id);
+  if(!ad) return;
+  editingAdId = id;
+  document.getElementById('newAdName').value = ad.name;
+  document.getElementById('newAdRoasMode').value = ad.autoRoas ? 'auto' : 'manual';
+  document.getElementById('newAdMetaRoas').value = ad.metaRoas || '';
+  document.getElementById('newAdSens').value = ad.sensibilidade;
+  toggleRoasMode();
+  document.getElementById('adFormBtn').textContent = 'Salvar alterações';
+  document.getElementById('cancelEditBtn').style.display = 'block';
+}
+function cancelEditAd(){
+  editingAdId = null;
+  document.getElementById('newAdName').value='';
+  document.getElementById('newAdMetaRoas').value='';
+  document.getElementById('newAdSens').value='15';
+  document.getElementById('newAdRoasMode').value='manual';
+  toggleRoasMode();
+  document.getElementById('adFormBtn').textContent = 'Adicionar anúncio';
+  document.getElementById('cancelEditBtn').style.display = 'none';
+}
+async function addAd(){
+  const name = document.getElementById('newAdName').value.trim();
+  const mode = document.getElementById('newAdRoasMode').value;
+  const auto = mode === 'auto';
+  const meta = auto ? 0 : (parseFloat(document.getElementById('newAdMetaRoas').value) || 0);
+  const sens = parseFloat(document.getElementById('newAdSens').value) || 15;
+  if(!name){ showToast('Dê um nome ao anúncio.'); return; }
+  try{
+    if(editingAdId){
+      const data = { store:STORE, name, metaRoas:meta, autoRoas:auto, sensibilidade:sens };
+      await db.collection('ads').doc(editingAdId).set(data);
+      const idx = CACHE.ads.findIndex(a=>a.id===editingAdId);
+      if(idx>=0) CACHE.ads[idx] = { id:editingAdId, ...data };
+      showToast('Anúncio atualizado.');
+    } else {
+      const id = 'ad_'+Date.now();
+      const data = { store:STORE, name, metaRoas:meta, autoRoas:auto, sensibilidade:sens };
+      await db.collection('ads').doc(id).set(data);
+      CACHE.ads.push({ id, ...data });
+      showToast('Anúncio adicionado.');
+    }
+    cancelEditAd();
+    renderAdManageList(); renderAdSelect(); renderAdsPainel(); renderResumo();
+  }catch(e){ showToast('Erro ao salvar anúncio.'); console.error(e); }
+}
+async function removeAd(id){
+  try{
+    await db.collection('ads').doc(id).delete();
+    CACHE.ads = CACHE.ads.filter(a=>a.id!==id);
+    CACHE.adEntries = CACHE.adEntries.filter(e=>e.adId!==id);
+    renderAdManageList(); renderAdSelect(); renderAdsPainel(); renderResumo();
+  }catch(e){ showToast('Erro ao remover.'); console.error(e); }
+}
+function adsForStore(){ return CACHE.ads.filter(a=>a.store===STORE); }
+function renderAdManageList(){
+  const el = document.getElementById('adList');
+  const ads = adsForStore();
+  if(ads.length===0){ el.innerHTML = '<div class="empty">Nenhum anúncio cadastrado ainda.</div>'; return; }
+  el.innerHTML = ads.map(a=>`
+    <div class="row-item">
+      <div>
+        <div class="name">${escapeHtml(a.name)}</div>
+        <div class="meta">${a.autoRoas ? 'ROAS automático' : 'meta ROAS '+a.metaRoas.toFixed(1)} · sensibilidade ${a.sensibilidade}%</div>
+      </div>
+      <button class="btn ghost" style="color:var(--blue);" onclick="editAd('${a.id}')">editar</button>
+      <button class="btn ghost" onclick="removeAd('${a.id}')">remover</button>
+    </div>
+  `).join('');
+}
+function renderAdSelect(){
+  const sel = document.getElementById('entryAdSelect');
+  const ads = adsForStore();
+  sel.innerHTML = ads.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
+}
+
+// ================= ADS: lançar dados diários =================
+function clearEntryForm(){
+  ['fInvestimento','fConversoes','fVendas','fRoas'].forEach(id=>{ document.getElementById(id).value = ''; });
+}
+function loadEntryFormForSelection(){
+  const adId = document.getElementById('entryAdSelect').value;
+  const date = document.getElementById('bData').value;
+  const existing = CACHE.adEntries.find(e=>e.store===STORE && e.adId===adId && e.date===date);
+  if(existing){
+    document.getElementById('fInvestimento').value = existing.investimento || '';
+    document.getElementById('fConversoes').value = existing.conversoes || '';
+    document.getElementById('fVendas').value = existing.vendas || '';
+    document.getElementById('fRoas').value = existing.roasPlataforma || '';
+  } else {
+    clearEntryForm();
+  }
+}
+async function saveAdEntry(){
+  const adId = document.getElementById('entryAdSelect').value;
+  if(!adId){ showToast('Cadastre um anúncio primeiro.'); return; }
+  const date = document.getElementById('bData').value;
+  if(!date){ showToast('Escolha uma data na aba Receita.'); return; }
+  const data = {
+    store: STORE, adId, date,
+    investimento: numOr(0,'fInvestimento'),
+    conversoes: numOr(0,'fConversoes'),
+    vendas: numOr(0,'fVendas'),
+    roasPlataforma: numOr(0,'fRoas'),
+  };
+  const id = `${STORE}_${adId}_${date}`;
+  try{
+    await db.collection('adEntries').doc(id).set(data);
+    CACHE.adEntries = CACHE.adEntries.filter(e=>e.id!==id);
+    CACHE.adEntries.push({id, ...data});
+    showToast('Registro salvo.');
+    renderAdsPainel(); renderResumo();
+  }catch(e){ showToast('Erro ao salvar.'); console.error(e); }
+}
+
+// ================= ADS: cálculos =================
+function entriesForAd(adId){
+  return CACHE.adEntries.filter(e=>e.store===STORE && e.adId===adId).sort((a,b)=>a.date.localeCompare(b.date));
+}
+function cpp(entry){ if(!entry || !entry.conversoes) return null; return entry.investimento / entry.conversoes; }
+function vendasDe(entry){ return entry.vendas ? entry.vendas : (entry.roasPlataforma||0) * (entry.investimento||0); }
+
+function last7Dates(){
+  const dates = [...new Set(CACHE.adEntries.filter(e=>e.store===STORE).map(e=>e.date))].sort();
+  return dates.slice(-7);
+}
+
+function computeAdStatus(ad, avgCpp){
+  const hist = entriesForAd(ad.id);
+  if(hist.length===0) return null;
+  const today = hist[hist.length-1];
+  const prior = hist.slice(0, -1).slice(-3);
+  const todayCpp = cpp(today);
+  const avgPriorCpp = prior.length ? prior.reduce((s,e)=>s+(cpp(e)||0),0)/prior.length : todayCpp;
+  const roasReal = today.roasPlataforma || 0;
+
+  let trend = 'flat';
+  if(prior.length>0 && todayCpp!=null && avgPriorCpp){
+    const delta = (todayCpp-avgPriorCpp)/avgPriorCpp;
+    trend = delta>0.03?'up':(delta<-0.03?'down':'flat');
+  }
+
+  // Cor: acima da média geral de CPP da loja = amarelo; igual ou abaixo = verde
+  const status = (todayCpp!=null && avgCpp) ? (todayCpp > avgCpp ? 'amber' : 'teal') : 'amber';
+
+  return { today, todayCpp, avgPriorCpp, roasReal, status, trend };
+}
+
+const statusColor = { red:'var(--red)', amber:'var(--amber)', teal:'var(--teal)', blue:'var(--blue)' };
+const statusPct = { red:90, amber:55, teal:75, blue:75 };
+
+function toggleAdDetail(adId){
+  expandedAdId = (expandedAdId === adId) ? null : adId;
+  renderAdsPainel();
+}
+
+function renderAdDetail(ad){
+  const hist = entriesForAd(ad.id).slice(-7);
+  if(hist.length===0) return '';
+  const fmtReais = v => 'R$ '+v.toFixed(2);
+  const fmtX = v => v.toFixed(1)+'x';
+  const cppPoints = hist.map(e=>({label:e.date, val:cpp(e)}));
+  const roasPoints = hist.map(e=>({label:e.date, val: e.roasPlataforma || null}));
+  const vendasPoints = hist.map(e=>({label:e.date, val:vendasDe(e)}));
+  const last = hist[hist.length-1];
+  const blocks =
+    metricBlock('CPP', cpp(last), fmtReais, cppPoints, 'var(--amber)') +
+    metricBlock('ROAS', last.roasPlataforma||null, fmtX, roasPoints, 'var(--teal)') +
+    metricBlock('Faturamento', vendasDe(last), fmtReais, vendasPoints, 'var(--blue)');
+  const recentRows = hist.slice().reverse().map(e=>{
+    const c = cpp(e);
+    return `<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:6px 0;border-bottom:1px solid var(--border);">
+      <span class="mono" style="color:var(--text-muted);">${e.date}</span>
+      <span class="mono">CPP ${c!=null?c.toFixed(2):'—'}</span>
+      <span class="mono">ROAS ${(e.roasPlataforma||0).toFixed(1)}x</span>
+      <span class="mono">R$ ${vendasDe(e).toFixed(0)}</span>
+    </div>`;
+  }).join('');
+  return `<div style="margin:-4px 0 12px;padding:12px;background:var(--surface-2);border-radius:0 0 14px 14px;border:1px solid var(--border);border-top:none;">
+    ${blocks}
+    <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin:10px 0 4px;">Últimos registros</div>
+    ${recentRows}
+  </div>`;
+}
+
+function aggregateAdsForDate(dateStr){
+  const dayEntries = CACHE.adEntries.filter(e=>e.store===STORE && e.date===dateStr);
+  if(dayEntries.length===0) return null;
+  let investimento=0, vendas=0, pedidos=0;
+  dayEntries.forEach(e=>{ investimento+=e.investimento; vendas+=vendasDe(e); pedidos+=e.conversoes; });
+  const cppGeral = pedidos ? investimento/pedidos : null;
+  const roasGeral = investimento ? vendas/investimento : null;
+  const bizRec = CACHE.dailyBusiness.find(b=>b.store===STORE && b.date===dateStr);
+  const pctAds = (bizRec && bizRec.pedidos) ? (pedidos/bizRec.pedidos*100) : null;
+  return { date:dateStr, investimento, vendas, pedidos, cppGeral, roasGeral, pctAds };
+}
+
+function renderVisaoGeral(){
+  const el = document.getElementById('visaoGeral');
+  const dates = last7Dates();
+  if(dates.length===0){ el.innerHTML = '<div class="empty">Sem registros ainda.</div>'; return; }
+  const aggs = dates.map(d=>({date:d, agg:aggregateAdsForDate(d)}));
+  const lastAgg = aggs[aggs.length-1].agg;
+  const fmtPct = v => v.toFixed(1)+'%';
+  const fmtReais = v => 'R$ '+v.toFixed(2);
+  const fmtX = v => v.toFixed(1)+'x';
+  const pctAdsPoints = aggs.map(x=>({label:x.date, val:x.agg.pctAds}));
+  const investPoints = aggs.map(x=>({label:x.date, val:x.agg.investimento}));
+  const vendasPoints = aggs.map(x=>({label:x.date, val:x.agg.vendas}));
+  const roasPoints = aggs.map(x=>({label:x.date, val:x.agg.roasGeral}));
+  const cppPoints = aggs.map(x=>({label:x.date, val:x.agg.cppGeral}));
+  el.innerHTML =
+    metricBlock('% de pedidos via ADS', lastAgg.pctAds, fmtPct, pctAdsPoints, 'var(--pink)') +
+    metricBlock('Investimento ADS', lastAgg.investimento, fmtReais, investPoints, 'var(--red)') +
+    metricBlock('Faturamento ADS', lastAgg.vendas, fmtReais, vendasPoints, 'var(--blue)') +
+    metricBlock('ROAS geral', lastAgg.roasGeral, fmtX, roasPoints, 'var(--teal)') +
+    metricBlock('CPP geral', lastAgg.cppGeral, fmtReais, cppPoints, 'var(--amber)');
+}
+
+function renderParticipacaoFaturamento(){
+  const el = document.getElementById('participacaoFaturamento');
+  const ads = adsForStore();
+  const rows = ads.map(ad=>{
+    const hist = entriesForAd(ad.id);
+    if(hist.length===0) return null;
+    const last = hist[hist.length-1];
+    return { name: ad.name, vendas: vendasDe(last) };
+  }).filter(r=>r && r.vendas>0);
+  if(rows.length===0){ el.innerHTML = '<div class="empty">Sem faturamento lançado ainda.</div>'; return; }
+  const total = rows.reduce((s,r)=>s+r.vendas,0);
+  rows.sort((a,b)=>b.vendas-a.vendas);
+  const colors = ['var(--pink)','var(--teal)','var(--amber)','var(--blue)','var(--red)'];
+  el.innerHTML = rows.map((r,i)=>{
+    const pct = total ? (r.vendas/total*100) : 0;
+    const color = colors[i % colors.length];
+    return `
+      <div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px;">
+          <span>${escapeHtml(r.name)}</span>
+          <span class="mono">R$ ${r.vendas.toFixed(0)} · ${pct.toFixed(0)}%</span>
+        </div>
+        <div style="background:var(--surface-2);border-radius:6px;height:8px;overflow:hidden;">
+          <div style="width:${pct.toFixed(1)}%;height:100%;background:${color};"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderAdsPainel(){
+  renderVisaoGeral();
+  renderParticipacaoFaturamento();
+  const wrap = document.getElementById('adRanking');
+  const ads = adsForStore();
+  if(ads.length===0){ wrap.innerHTML = '<div class="empty">Cadastre anúncios na aba Anúncios.</div>'; return; }
+
+  // média geral do CPP (entre os anúncios com lançamento) — referência pra colorir cada card
+  const cppsAtuais = ads.map(ad=>{
+    const hist = entriesForAd(ad.id);
+    return hist.length ? cpp(hist[hist.length-1]) : null;
+  }).filter(c=>c!=null);
+  const avgCpp = cppsAtuais.length ? cppsAtuais.reduce((s,c)=>s+c,0)/cppsAtuais.length : null;
+
+  const rows = ads.map(ad=>({ ad, s: computeAdStatus(ad, avgCpp) })).filter(r=>r.s);
+  if(rows.length===0){ wrap.innerHTML = '<div class="empty">Nenhum registro ainda.</div>'; return; }
+  rows.sort((a,b)=> (b.s.todayCpp||0) - (a.s.todayCpp||0));
+  wrap.innerHTML = rows.map(({ad,s})=>{
+    const arrow = s.trend==='up' ? '▲' : (s.trend==='down' ? '▼' : '►');
+    const arrowClass = s.trend==='up'?'up':(s.trend==='down'?'down':'flat');
+    const pct = statusPct[s.status];
+    return `
+      <div>
+        <div class="ad-card" style="--status-color:${statusColor[s.status]}; --pct:${pct};" onclick="toggleAdDetail('${ad.id}')">
+          <div class="gauge" style="--status-color:${statusColor[s.status]}; --pct:${pct}"><span>${s.todayCpp!=null ? s.todayCpp.toFixed(0) : '—'}</span></div>
+          <div class="ad-info">
+            <div class="name">${escapeHtml(ad.name)}</div>
+            <div class="metrics">
+              <span>CPP <b>R$ ${s.todayCpp!=null?s.todayCpp.toFixed(2):'—'}</b>${avgCpp?' <span style="color:var(--text-muted);">(média R$ '+avgCpp.toFixed(2)+')</span>':''}</span>
+              <span>ROAS <b>${s.roasReal.toFixed(1)}x</b> ${ad.autoRoas ? '(automático)' : '/ meta '+ad.metaRoas.toFixed(1)+'x'}</span>
+            </div>
+          </div>
+          <div class="trend ${arrowClass}">${arrow}</div>
+        </div>
+        ${expandedAdId===ad.id ? renderAdDetail(ad) : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderResumo(){
+  const wrap = document.getElementById('resumoTableWrap');
+  const ads = adsForStore();
+  if(ads.length===0){ wrap.innerHTML = '<div class="empty">Cadastre anúncios e lance dados para ver o resumo.</div>'; return; }
+  const rowsData = ads.map(ad=>{
+    const hist = entriesForAd(ad.id);
+    if(hist.length===0) return { ad, hasData:false };
+    const last = hist[hist.length-1];
+    const pedidos = last.conversoes||0;
+    const investimento = last.investimento||0;
+    const vendas = vendasDe(last);
+    const roas = investimento ? (vendas/investimento) : null;
+    const cppVal = pedidos ? (investimento/pedidos) : null;
+    return { ad, hasData:true, pedidos, vendas, investimento, roas, cpp:cppVal };
+  });
+  let totPedidos=0, totVendas=0, totInvestimento=0;
+  rowsData.forEach(r=>{
+    if(!r.hasData) return;
+    totPedidos+=r.pedidos; totVendas+=r.vendas; totInvestimento+=r.investimento;
+  });
+  const totRoas = totInvestimento ? (totVendas/totInvestimento) : null;
+  const totCpp = totPedidos ? (totInvestimento/totPedidos) : null;
+  const fmt = (v, prefix='', suffix='', dec=2) => v==null ? '—' : prefix+v.toFixed(dec)+suffix;
+  const bodyRows = rowsData.map(r=>{
+    if(!r.hasData) return `<tr><td>${escapeHtml(r.ad.name)}</td><td colspan="5" style="text-align:left;color:var(--text-muted);">sem registros</td></tr>`;
+    return `<tr>
+      <td>${escapeHtml(r.ad.name)}</td>
+      <td class="hl">${r.pedidos}</td>
+      <td>${fmt(r.vendas,'R$ ')}</td>
+      <td>${fmt(r.investimento,'R$ ')}</td>
+      <td>${fmt(r.roas,'','x',2)}</td>
+      <td class="hl">${fmt(r.cpp,'R$ ')}</td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `
+    <table class="resumo-table">
+      <thead><tr><th>Anúncio</th><th class="hl">Pedidos</th><th>Faturamento</th><th>Investimento</th><th>ROAS</th><th class="hl">CPP</th></tr></thead>
+      <tbody>
+        ${bodyRows}
+        <tr class="totals">
+          <td>Total</td>
+          <td class="hl">${totPedidos}</td>
+          <td>${fmt(totVendas,'R$ ')}</td>
+          <td>${fmt(totInvestimento,'R$ ')}</td>
+          <td>${fmt(totRoas,'','x',2)}</td>
+          <td class="hl">${fmt(totCpp,'R$ ')}</td>
+        </tr>
+      </tbody>
+    </table>
+  `;
+}
+
+// ================= DESPESAS FIXAS (manual) =================
+function expId(store,date){ return `${store}_${date}`; }
+function loadExpensesForm(){
+  const date = document.getElementById('eData').value;
+  const existing = CACHE.weeklyExpenses.find(w=>w.store===STORE && w.date===date);
+  const fields = { eGabi:'gabi', eSoftwares:'softwares', eContador:'contador', eProLabore:'proLabore' };
+  Object.keys(fields).forEach(id=>{
+    document.getElementById(id).value = existing ? (existing[fields[id]] || '') : '';
+  });
+}
+async function saveExpenses(){
+  const date = document.getElementById('eData').value;
+  if(!date){ showToast('Escolha uma data.'); return; }
+  const data = {
+    store: STORE, date,
+    gabi: numOr(0,'eGabi'), softwares: numOr(0,'eSoftwares'), contador: numOr(0,'eContador'),
+    proLabore: numOr(0,'eProLabore'),
+  };
+  const id = expId(STORE,date);
+  try{
+    await db.collection('weeklyExpenses').doc(id).set(data);
+    CACHE.weeklyExpenses = CACHE.weeklyExpenses.filter(w=>w.id!==id);
+    CACHE.weeklyExpenses.push({id, ...data});
+    showToast('Despesas salvas.');
+    renderExpensesHistory();
+    renderPainel();
+  }catch(e){ showToast('Erro ao salvar.'); console.error(e); }
+}
+function despesasFixasTotal(exp){
+  if(!exp) return 0;
+  return (exp.gabi||0)+(exp.softwares||0)+(exp.contador||0);
+}
+function renderExpensesHistory(){
+  const el = document.getElementById('expensesHistory');
+  const list = CACHE.weeklyExpenses.filter(w=>w.store===STORE).sort((a,b)=>b.date.localeCompare(a.date));
+  if(list.length===0){ el.innerHTML = '<div class="empty">Nenhum registro ainda.</div>'; return; }
+  el.innerHTML = list.map(w=>`
+    <div class="row-item" style="cursor:pointer;" onclick="document.getElementById('eData').value='${w.date}'; loadExpensesForm();">
+      <div><div class="name">${w.date}</div><div class="meta">Fixas: R$ ${despesasFixasTotal(w).toFixed(2)} · Pró-labore: R$ ${(w.proLabore||0).toFixed(2)}</div></div>
+    </div>
+  `).join('');
+}
+
+// ================= CUSTOS UNITÁRIOS (editáveis por loja) =================
+function loadRateConfigForm(){
+  const r = getRateProfile(STORE);
+  document.getElementById('rMateriaPrima').value = r.materiaPrimaPorPedido;
+  document.getElementById('rEmbalagem').value = r.embalagemPorPedido;
+  document.getElementById('rTinta').value = r.tintaPorPedido;
+  document.getElementById('rImposto').value = (r.impostoSimplesPct*100).toFixed(2);
+  document.getElementById('rComissao').value = (r.comissaoPct*100).toFixed(2);
+  document.getElementById('rPorItem').value = r.porItemPorPedido;
+  document.getElementById('rSaque').value = (r.saquePct*100).toFixed(2);
+}
+async function saveRateConfig(){
+  const data = {
+    materiaPrimaPorPedido: numOr(0,'rMateriaPrima'),
+    embalagemPorPedido: numOr(0,'rEmbalagem'),
+    tintaPorPedido: numOr(0,'rTinta'),
+    impostoSimplesPct: numOr(0,'rImposto')/100,
+    comissaoPct: numOr(0,'rComissao')/100,
+    porItemPorPedido: numOr(0,'rPorItem'),
+    saquePct: numOr(0,'rSaque')/100,
+  };
+  try{
+    await db.collection('rateConfig').doc(STORE).set(data);
+    CACHE.rateConfig[STORE] = data;
+    showToast('Custos atualizados.');
+    renderAutoDespesasBlock();
+    renderPainel();
+    renderPlan();
+  }catch(e){ showToast('Erro ao salvar.'); console.error(e); }
+}
+async function resetRateConfig(){
+  try{
+    await db.collection('rateConfig').doc(STORE).delete();
+    delete CACHE.rateConfig[STORE];
+    loadRateConfigForm();
+    showToast('Restaurado ao padrão.');
+    renderAutoDespesasBlock();
+    renderPainel();
+    renderPlan();
+  }catch(e){ showToast('Erro ao restaurar.'); console.error(e); }
+}
+
+// ================= DESPESAS VARIÁVEIS (calculado) =================
+const STORES = ['c4a','c2u'];
+const PLATFORM_NAME = { c4a:'Shopee', c2u:'Shopee' };
+const DEFAULT_RATE_PROFILES = {
+  c4a: { materiaPrimaPorPedido:2.00, embalagemPorPedido:0.20, tintaPorPedido:0.10, impostoSimplesPct:0.08, comissaoPct:0.20, porItemPorPedido:4.00, saquePct:0.035 },
+  c2u: { materiaPrimaPorPedido:2.00, embalagemPorPedido:0.20, tintaPorPedido:0.10, impostoSimplesPct:0.08, comissaoPct:0.20, porItemPorPedido:4.00, saquePct:0.035 },
+};
+// Custos unitários editáveis por loja (sobrescrevem o padrão acima quando salvos em "Despesas > Custos")
+function getRateProfile(store){
+  const base = DEFAULT_RATE_PROFILES[store] || DEFAULT_RATE_PROFILES.c4a;
+  const override = CACHE.rateConfig[store];
+  return override ? { ...base, ...override } : base;
+}
+function autoDespesasForPeriod(store, pedidos, vendas){
+  const r = getRateProfile(store);
+  return {
+    materiaPrima: pedidos * r.materiaPrimaPorPedido,
+    embalagem: pedidos * r.embalagemPorPedido,
+    tinta: pedidos * r.tintaPorPedido,
+    impostoSimples: vendas * r.impostoSimplesPct,
+    comissao: vendas * r.comissaoPct,
+    porItem: pedidos * r.porItemPorPedido,
+    saque: vendas * r.saquePct,
+  };
+}
+function autoDespesasTotal(a){
+  return a.materiaPrima+a.embalagem+a.tinta+a.impostoSimples+a.comissao+a.porItem+a.saque;
+}
+function autoDespesasForView(view){
+  if(view==='all'){
+    const totals = {materiaPrima:0,embalagem:0,tinta:0,impostoSimples:0,comissao:0,porItem:0,saque:0};
+    STORES.forEach(s=>{
+      const agg = latestBizAgg(s);
+      const a = autoDespesasForPeriod(s, agg.pedidos, agg.vendas);
+      Object.keys(totals).forEach(k=> totals[k]+=a[k]);
+    });
+    return totals;
+  }
+  const agg = latestBizAgg(view);
+  return autoDespesasForPeriod(view, agg.pedidos, agg.vendas);
+}
+function renderAutoDespesasBlock(){
+  const el = document.getElementById('autoDespesasBlock');
+  const a = autoDespesasForView(STORE);
+  const r = getRateProfile(STORE);
+  const plataforma = PLATFORM_NAME[STORE];
+  const rows = [
+    ['Matéria-prima', a.materiaPrima],
+    ['Embalagem/etiquetas', a.embalagem],
+    ['Tinta', a.tinta],
+    ['Imposto Simples (8%)', a.impostoSimples],
+    [`Comissão ${plataforma} (${(r.comissaoPct*100).toFixed(1)}%)`, a.comissao],
+  ];
+  if(r.porItemPorPedido>0) rows.push([`Taxa ${plataforma} por item`, a.porItem]);
+  if(r.saquePct>0) rows.push([`Taxa ${plataforma} saque (${(r.saquePct*100).toFixed(1)}%)`, a.saque]);
+  rows.push(['Total automático', autoDespesasTotal(a)]);
+  el.innerHTML = rows.map(([k,v],i)=>`<div class="metric-row"${i===rows.length-1?' style="border-top:1px solid var(--border);font-weight:700;"':''}><span class="k">${k}</span><span class="v">R$ ${v.toFixed(2)}</span></div>`).join('');
+}
+
+// ================= PAINEL (Balanço) =================
+function latestExpensesForStore(store){
+  const list = CACHE.weeklyExpenses.filter(w=>w.store===store).sort((a,b)=>a.date.localeCompare(b.date));
+  return list.length ? list[list.length-1] : null;
+}
+function latestExpenses(view){
+  if(view==='all'){
+    const exps = STORES.map(s=>latestExpensesForStore(s));
+    if(exps.every(e=>!e)) return null;
+    const m = (k)=> exps.reduce((s,e)=> s+(e?e[k]||0:0), 0);
+    return { gabi:m('gabi'), softwares:m('softwares'), contador:m('contador'), proLabore:m('proLabore') };
+  }
+  return latestExpensesForStore(view);
+}
+function adInvestForDate(view,date){
+  return CACHE.adEntries.filter(e=> (view==='all'?true:e.store===view) && e.date===date).reduce((s,e)=>s+(e.investimento||0),0);
+}
+function bizForDate(view,date){
+  return CACHE.dailyBusiness.filter(b=> (view==='all'?true:b.store===view) && b.date===date);
+}
+function last7BizDates(view){
+  const list = CACHE.dailyBusiness.filter(b=> view==='all'?true:b.store===view);
+  const dates = [...new Set(list.map(b=>b.date))].sort();
+  return dates.slice(-7);
+}
+
+// Cada lançamento diário JÁ representa os últimos 7 dias (janela móvel da Shopee).
+// Por isso usamos sempre o registro MAIS RECENTE de cada loja — nunca somamos vários dias.
+function latestBizForStore(store){
+  const dates = [...new Set(CACHE.dailyBusiness.filter(b=>b.store===store).map(b=>b.date))].sort();
+  if(dates.length===0) return null;
+  const lastDate = dates[dates.length-1];
+  let vendas=0, pedidos=0;
+  bizForDate(store,lastDate).forEach(b=>{ vendas+=(b.vendas||0); pedidos+=(b.pedidos||0); });
+
+  // Líquido recebido é um valor diário de verdade (depósito de cada dia) — soma os últimos 7 lançamentos,
+  // diferente de Vendas/Pedidos que já chegam prontos como "últimos 7 dias" da Shopee.
+  const last7 = dates.slice(-7);
+  let liquidoRecebido=0, temLiquido=false;
+  last7.forEach(d=>{
+    bizForDate(store,d).forEach(b=>{ if(b.liquidoRecebido){ liquidoRecebido+=b.liquidoRecebido; temLiquido=true; } });
+  });
+
+  return { date:lastDate, vendas, pedidos, liquidoRecebido, temLiquido };
+}
+function latestBizAgg(view){
+  if(view==='all'){
+    const recs = STORES.map(s=>latestBizForStore(s));
+    return {
+      vendas: recs.reduce((s,r)=> s+(r?r.vendas:0), 0),
+      pedidos: recs.reduce((s,r)=> s+(r?r.pedidos:0), 0),
+      liquidoRecebido: recs.reduce((s,r)=> s+(r?r.liquidoRecebido:0), 0),
+      temLiquido: recs.some(r=> r && r.temLiquido),
+    };
+  }
+  const r = latestBizForStore(view);
+  return r ? { vendas:r.vendas, pedidos:r.pedidos, liquidoRecebido:r.liquidoRecebido, temLiquido:r.temLiquido } : { vendas:0, pedidos:0, liquidoRecebido:0, temLiquido:false };
+}
+function latestAdInvestForStore(store){
+  const dates = [...new Set(CACHE.adEntries.filter(e=>e.store===store).map(e=>e.date))].sort();
+  if(dates.length===0) return 0;
+  const d = dates[dates.length-1];
+  return CACHE.adEntries.filter(e=>e.store===store && e.date===d).reduce((s,e)=>s+(e.investimento||0),0);
+}
+function latestAdInvestForView(view){
+  if(view==='all') return STORES.reduce((s,st)=> s+latestAdInvestForStore(st), 0);
+  return latestAdInvestForStore(view);
+}
+
+function balancoFor(view){
+  const agg = latestBizAgg(view);
+  const vendas = agg.vendas;
+  const investAds = latestAdInvestForView(view);
+  const exp = latestExpenses(view);
+  const despesasFixas = despesasFixasTotal(exp);
+  const despesasVariaveis = autoDespesasTotal(autoDespesasForView(view));
+  const proLabore = exp ? (exp.proLabore||0) : 0;
+  const lucroOperacional = vendas - despesasFixas - despesasVariaveis - investAds;
+  const margemOperacional = vendas ? (lucroOperacional/vendas*100) : null;
+  const lucroFinal = lucroOperacional - proLabore;
+  const margemLiquida = vendas ? (lucroFinal/vendas*100) : null;
+  const projecaoMensal = (lucroFinal/7*30);
+
+  // Despesas invisíveis: só as taxas conhecidas da plataforma (comissão + saque + por item, cada loja com sua própria taxa)
+  // vs o que ela realmente depositou. Não entra despesa fixa, pró-labore nem ADS aqui.
+  let liquidoEsperado = null, despesasInvisiveis = null;
+  if(agg.temLiquido){
+    liquidoEsperado = liquidoEsperadoForView(view);
+    despesasInvisiveis = liquidoEsperado - agg.liquidoRecebido;
+  }
+
+  return { vendas, investAds, despesasFixas, despesasVariaveis, proLabore, lucroOperacional, margemOperacional, lucroFinal, margemLiquida, projecaoMensal, liquidoEsperado, despesasInvisiveis, liquidoRecebido: agg.liquidoRecebido, temLiquido: agg.temLiquido };
+}
+
+function liquidoEsperadoForView(view){
+  const stores = view==='all' ? STORES : [view];
+  return stores.reduce((sum,s)=>{
+    const agg = latestBizAgg(s);
+    const r = getRateProfile(s);
+    return sum + (agg.vendas*(1 - r.comissaoPct - r.saquePct) - agg.pedidos*r.porItemPorPedido);
+  }, 0);
+}
+
+// Junta os pontos diários de cada loja (cada uma com sua própria taxa/despesa) por data, somando quando coincidem.
+function mergePointsByDate(perStorePoints){
+  const allDates = new Set();
+  perStorePoints.forEach(pts=> pts.forEach(p=>allDates.add(p.label)));
+  const dates = [...allDates].sort().slice(-7);
+  return dates.map(d=>{
+    let sum=0, any=false;
+    perStorePoints.forEach(pts=>{
+      const p = pts.find(x=>x.label===d);
+      if(p && p.val!=null){ sum+=p.val; any=true; }
+    });
+    return { label:d, val: any?sum:null };
+  });
+}
+
+// Evolução diária: cada ponto do gráfico já é o "últimos 7 dias" daquele dia — não proratear despesas.
+function dailyLucroPointsForStore(store){
+  const dates = last7BizDates(store);
+  const exp = latestExpensesForStore(store);
+  const despesasFixas = despesasFixasTotal(exp);
+  const proLabore = exp ? (exp.proLabore||0) : 0;
+  return dates.map(d=>{
+    let vendas=0, pedidos=0;
+    bizForDate(store,d).forEach(b=>{ vendas+=(b.vendas||0); pedidos+=(b.pedidos||0); });
+    const invest = adInvestForDate(store,d);
+    const despVar = autoDespesasTotal(autoDespesasForPeriod(store, pedidos, vendas));
+    const lucro = vendas - despesasFixas - despVar - invest - proLabore;
+    return {label:d, val:lucro};
+  });
+}
+function dailyLucroPoints(view){
+  if(view==='all') return mergePointsByDate(STORES.map(s=>dailyLucroPointsForStore(s)));
+  return dailyLucroPointsForStore(view);
+}
+
+// Para cada dia, olha a Vendas/Pedidos daquele dia (já são "últimos 7 dias") e soma o Líquido Recebido
+// numa janela rolante de até 7 lançamentos diários terminando naquela data — pra ficar comparável.
+function dailyGapPointsForStore(store){
+  const dates = last7BizDates(store);
+  const r = getRateProfile(store);
+  return dates.map((d,idx)=>{
+    let vendas=0, pedidos=0;
+    bizForDate(store,d).forEach(b=>{ vendas+=(b.vendas||0); pedidos+=(b.pedidos||0); });
+    const start = Math.max(0, idx-6);
+    let liquidoRecebido=0, temLiquido=false;
+    for(let i=start;i<=idx;i++){
+      bizForDate(store,dates[i]).forEach(b=>{ if(b.liquidoRecebido){ liquidoRecebido+=b.liquidoRecebido; temLiquido=true; } });
+    }
+    if(!temLiquido) return {label:d, val:null};
+    const liquidoEsperado = vendas*(1 - r.comissaoPct - r.saquePct) - pedidos*r.porItemPorPedido;
+    return {label:d, val: liquidoEsperado - liquidoRecebido};
+  });
+}
+function dailyGapPoints(view){
+  if(view==='all') return mergePointsByDate(STORES.map(s=>dailyGapPointsForStore(s)));
+  return dailyGapPointsForStore(view);
+}
+
+function latestReceitaDateForStore(store){
+  const dates = [...new Set(CACHE.dailyBusiness.filter(b=>b.store===store).map(b=>b.date))].sort();
+  return dates.length ? dates[dates.length-1] : null;
+}
+function latestAdsDateForStore(store){
+  const dates = [...new Set(CACHE.adEntries.filter(e=>e.store===store).map(e=>e.date))].sort();
+  return dates.length ? dates[dates.length-1] : null;
+}
+function checkDateMismatch(view){
+  const stores = view==='all' ? STORES : [view];
+  const avisos = [];
+  stores.forEach(s=>{
+    const r = latestReceitaDateForStore(s);
+    const a = latestAdsDateForStore(s);
+    if(r && a && r!==a) avisos.push(`${s.toUpperCase()}: Receita mais recente em ${r}, mas ADS mais recente em ${a} — os números do Balanço estão misturando datas diferentes.`);
+    else if(r && !a) avisos.push(`${s.toUpperCase()}: você já lançou Receita, mas ainda não lançou nenhum dado de ADS.`);
+  });
+  return avisos;
+}
+
+function renderPainel(){
+  const view = PAINEL_VIEW;
+  const b = balancoFor(view);
+  const fmtReais = v => 'R$ '+v.toFixed(0);
+  const fmtPct = v => v==null ? '—' : v.toFixed(1)+'%';
+
+  const avisos = checkDateMismatch(view);
+  document.getElementById('dateWarning').innerHTML = avisos.length ? `
+    <div class="card-block" style="border-left:3px solid var(--amber);margin-bottom:16px;">
+      ${avisos.map(a=>`<div style="font-size:12px;line-height:1.5;margin-bottom:4px;">⚠️ ${a}</div>`).join('')}
+    </div>
+  ` : '';
+
+  document.getElementById('pLucroFinal').textContent = fmtReais(b.lucroFinal);
+  document.getElementById('pLucroFinal').className = 'value ' + (b.lucroFinal>=0?'teal':'red');
+  document.getElementById('pMargemLiquida').textContent = fmtPct(b.margemLiquida);
+  document.getElementById('pProjecao').textContent = fmtReais(b.projecaoMensal);
+
+  const points = dailyLucroPoints(view);
+  const fmtReaisFull = v => 'R$ '+v.toFixed(0);
+  document.getElementById('lucroChart').innerHTML = metricBlock('Lucro líquido', b.lucroFinal, fmtReaisFull, points, b.lucroFinal>=0 ? 'var(--teal)' : 'var(--red)');
+
+  const rows = [
+    ['plus','Vendas', 'R$ '+b.vendas.toFixed(0)],
+    ['minus','ADS', 'R$ '+b.investAds.toFixed(0)],
+    ['minus','Despesas fixas', 'R$ '+b.despesasFixas.toFixed(0)],
+    ['minus','Despesas variáveis', 'R$ '+b.despesasVariaveis.toFixed(0)],
+    ['eq','Lucro operacional', 'R$ '+b.lucroOperacional.toFixed(0)],
+    ['','Margem operacional', fmtPct(b.margemOperacional)],
+    ['minus','Pró-labore', 'R$ '+b.proLabore.toFixed(0)],
+    ['eq','Lucro líquido final', 'R$ '+b.lucroFinal.toFixed(0)],
+    ['','Margem líquida', fmtPct(b.margemLiquida)],
+    ['','Projeção mensal', 'R$ '+b.projecaoMensal.toFixed(0)],
+  ];
+  document.getElementById('balancoBreakdown').innerHTML = rows.map(([cls,k,v])=>`
+    <div class="metric-row ${cls}"><span class="k">${k}</span><span class="v">${v}</span></div>
+  `).join('');
+
+  const realEl = document.getElementById('lucroRealBlock');
+  if(b.temLiquido){
+    const pctVendas = b.vendas ? (b.despesasInvisiveis/b.vendas*100) : null;
+    const gapColor = b.despesasInvisiveis>0 ? 'red' : 'teal';
+    const gapPoints = dailyGapPoints(view);
+    realEl.innerHTML = `
+      <div class="section-title">Despesas invisíveis (Shopee)</div>
+      <div class="card-block">
+        <div class="metric-row"><span class="k">Vendas (7 dias)</span><span class="v">R$ ${b.vendas.toFixed(0)}</span></div>
+        <div class="metric-row"><span class="k">Líquido esperado (só taxas conhecidas)</span><span class="v">R$ ${b.liquidoEsperado.toFixed(0)}</span></div>
+        <div class="metric-row"><span class="k">Líquido recebido de verdade</span><span class="v">R$ ${b.liquidoRecebido.toFixed(0)}</span></div>
+        <div class="metric-row"><span class="k">Despesas invisíveis</span><span class="v ${gapColor}">R$ ${b.despesasInvisiveis.toFixed(0)}${pctVendas!=null?' ('+pctVendas.toFixed(1)+'% das vendas)':''}</span></div>
+        <div class="thresholds-note">Diferença entre o que a Shopee deveria depositar (descontando só comissão, taxa por item e taxa de saque) e o que ela realmente depositou — majoritariamente pedidos cancelados/devolvidos e ajustes que não aparecem em outro lugar.</div>
+      </div>
+      <div class="section-title">Evolução das despesas invisíveis</div>
+      ${metricBlock('Despesas invisíveis', b.despesasInvisiveis, v=>'R$ '+v.toFixed(0), gapPoints, gapColor)}
+    `;
+  } else {
+    realEl.innerHTML = '';
+  }
+}
+
+// ================= PLAN =================
+function varRatesForStore(store){
+  const r = getRateProfile(store);
+  return {
+    porPedido: r.materiaPrimaPorPedido + r.embalagemPorPedido + r.tintaPorPedido + r.porItemPorPedido,
+    porVenda: r.impostoSimplesPct + r.comissaoPct + r.saquePct,
+  };
+}
+
+function planId(store){ return store; }
+
+async function savePlan(){
+  const meta = numOr(null,'planMeta');
+  if(meta==null){ showToast('Informe uma meta.'); return; }
+  const data = { store: STORE, meta };
+  const id = planId(STORE);
+  try{
+    await db.collection('plans').doc(id).set(data);
+    CACHE.plans = CACHE.plans.filter(p=>p.id!==id);
+    CACHE.plans.push({id, ...data});
+    showToast('Meta salva.');
+    renderPlan();
+  }catch(e){ showToast('Erro ao salvar.'); console.error(e); }
+}
+
+function latestAdAggForStore(store){
+  const dates = [...new Set(CACHE.adEntries.filter(e=>e.store===store).map(e=>e.date))].sort();
+  if(dates.length===0) return null;
+  const d = dates[dates.length-1];
+  let investimento=0, vendas=0, pedidos=0;
+  CACHE.adEntries.filter(e=>e.store===store && e.date===d).forEach(e=>{ investimento+=e.investimento; vendas+=vendasDe(e); pedidos+=e.conversoes; });
+  return { investimento, vendas, pedidos, cppGeral: pedidos?investimento/pedidos:null };
+}
+
+function planParamsForStore(store){
+  const adAgg = latestAdAggForStore(store);
+  const biz = latestBizForStore(store);
+  const exp = latestExpensesForStore(store);
+  const cpp = adAgg ? adAgg.cppGeral : null;
+  const pAdsPct = (adAgg && biz && biz.pedidos) ? (adAgg.pedidos/biz.pedidos*100) : null;
+  const ticketMedio = biz ? (biz.vendas && biz.pedidos ? biz.vendas/biz.pedidos : null) : null;
+  const despesasFixas = despesasFixasTotal(exp);
+  const proLabore = exp ? (exp.proLabore||0) : 0;
+  return { cpp, pAdsPct, ticketMedio, despesasFixas, proLabore };
+}
+
+function calcPlanScenario(store, metaLucro, despesasFixas, proLabore, cpp, pAdsFrac, ticketMedio){
+  if(!cpp || !pAdsFrac || !ticketMedio) return null;
+  const vr = varRatesForStore(store);
+  // L = Vendas*(1-taxaSobreVenda) - Pedidos*custoFixoPorPedido - DespesasFixas - Investimento - ProLabore
+  // Vendas = Investimento*ticketMedio/(cpp*pAdsFrac); Pedidos = Investimento/(cpp*pAdsFrac)
+  const denom = (ticketMedio*(1-vr.porVenda) - vr.porPedido) / (cpp*pAdsFrac) - 1;
+  if(denom <= 0) return null;
+  const investimento = (metaLucro + despesasFixas + proLabore) / denom;
+  const pedidosAds = investimento / cpp;
+  const pedidosTotais = pedidosAds / pAdsFrac;
+  const vendas = pedidosTotais * ticketMedio;
+  return { investimento, pedidosAds, pedidosTotais, vendas };
+}
+
+function renderPlan(){
+  const paramsEl = document.getElementById('planParams');
+  const scenEl = document.getElementById('planScenarios');
+  const plan = CACHE.plans.find(p=>p.store===STORE);
+  document.getElementById('planMeta').value = plan ? plan.meta : '';
+
+  const p = planParamsForStore(STORE);
+  const fmtReais = v => v==null ? '—' : 'R$ '+v.toFixed(2);
+  const fmtPct = v => v==null ? '—' : v.toFixed(1)+'%';
+
+  paramsEl.innerHTML = `
+    <div class="metric-row"><span class="k">CPP atual</span><span class="v">${fmtReais(p.cpp)}</span></div>
+    <div class="metric-row"><span class="k">% pedidos via ADS</span><span class="v">${fmtPct(p.pAdsPct)}</span></div>
+    <div class="metric-row"><span class="k">Ticket médio</span><span class="v">${fmtReais(p.ticketMedio)}</span></div>
+    <div class="metric-row"><span class="k">Despesas fixas</span><span class="v">${fmtReais(p.despesasFixas)}</span></div>
+    <div class="metric-row"><span class="k">Pró-labore</span><span class="v">${fmtReais(p.proLabore)}</span></div>
+  `;
+
+  if(!plan){
+    scenEl.innerHTML = '<div class="empty">Defina uma meta de lucro acima para ver os cenários.</div>';
+    return;
+  }
+  if(p.cpp==null || p.pAdsPct==null || p.ticketMedio==null){
+    scenEl.innerHTML = '<div class="empty">Faltam dados de ADS e/ou Receita lançados para calcular. Lance pelo menos um dia em cada aba.</div>';
+    return;
+  }
+
+  const pAdsFrac = p.pAdsPct/100;
+  const scenarios = [
+    { label:'Conservador (CPP 20% pior)', cpp: p.cpp*1.20, color:'var(--red)' },
+    { label:'Esperado (CPP atual)', cpp: p.cpp, color:'var(--amber)' },
+    { label:'Otimista (CPP 10% melhor)', cpp: p.cpp*0.90, color:'var(--teal)' },
+  ];
+
+  scenEl.innerHTML = scenarios.map(s=>{
+    const r = calcPlanScenario(STORE, plan.meta, p.despesasFixas, p.proLabore, s.cpp, pAdsFrac, p.ticketMedio);
+    if(!r){
+      return `<div class="card-block"><div style="font-weight:600;margin-bottom:6px;">${s.label}</div><div class="empty" style="padding:16px;">Meta não atingível com esses parâmetros — o ticket médio atual não cobre os custos variáveis por pedido nesse cenário.</div></div>`;
+    }
+    return `
+      <div class="card-block">
+        <div style="font-weight:600;margin-bottom:8px;">${s.label}</div>
+        <div class="metric-row"><span class="k">Investimento ADS necessário (7d)</span><span class="v" style="color:${s.color}">${fmtReais(r.investimento)}</span></div>
+        <div class="metric-row"><span class="k">↳ equivalente por dia</span><span class="v" style="color:${s.color}">${fmtReais(r.investimento/7)}</span></div>
+        <div class="metric-row"><span class="k">Pedidos via ADS</span><span class="v">${r.pedidosAds.toFixed(0)}</span></div>
+        <div class="metric-row"><span class="k">Pedidos totais (loja)</span><span class="v">${r.pedidosTotais.toFixed(0)}</span></div>
+        <div class="metric-row"><span class="k">Vendas necessárias</span><span class="v">${fmtReais(r.vendas)}</span></div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ================= ANÁLISE (versão teste: só os gráficos juntos) =================
+function renderAnaliseCharts(){
+  const el = document.getElementById('analiseCharts');
+
+  const lucroPoints = dailyLucroPointsForStore(STORE);
+  const adsDates = last7Dates();
+  const investPoints = adsDates.map(d=>({ label:d, val: (aggregateAdsForDate(d)||{}).investimento ?? null }));
+  const cppPoints = adsDates.map(d=>({ label:d, val: (aggregateAdsForDate(d)||{}).cppGeral ?? null }));
+  const bizDates = last7BizDates(STORE);
+  const taxaConvPoints = bizDates.map(d=>{
+    const recs = bizForDate(STORE,d);
+    return { label:d, val: recs.length ? recs[0].taxaConversao : null };
+  });
+  const ticketMedioPoints = bizDates.map(d=>{
+    const recs = bizForDate(STORE,d);
+    return { label:d, val: recs.length ? recs[0].ticketMedio : null };
+  });
+  const pedidosPoints = bizDates.map(d=>{
+    const recs = bizForDate(STORE,d);
+    return { label:d, val: recs.length ? recs[0].pedidos : null };
+  });
+
+  const lastLucro = lucroPoints.length ? lucroPoints[lucroPoints.length-1].val : null;
+  const lastInvest = investPoints.length ? investPoints[investPoints.length-1].val : null;
+  const lastCpp = cppPoints.length ? cppPoints[cppPoints.length-1].val : null;
+  const lastTaxaConv = taxaConvPoints.length ? taxaConvPoints[taxaConvPoints.length-1].val : null;
+  const lastTicketMedio = ticketMedioPoints.length ? ticketMedioPoints[ticketMedioPoints.length-1].val : null;
+  const lastPedidos = pedidosPoints.length ? pedidosPoints[pedidosPoints.length-1].val : null;
+
+  const fmtReais = v => 'R$ '+v.toFixed(0);
+  const fmtReais2 = v => 'R$ '+v.toFixed(2);
+  const fmtPct = v => v.toFixed(2)+'%';
+  const fmtInt = v => v.toFixed(0);
+
+  const corrInvest = pearsonCorrelation(investPoints, lucroPoints);
+  const corrCpp = pearsonCorrelation(cppPoints, lucroPoints);
+  const corrTaxaConv = pearsonCorrelation(taxaConvPoints, lucroPoints);
+  const corrTicketMedio = pearsonCorrelation(ticketMedioPoints, lucroPoints);
+  const corrPedidos = pearsonCorrelation(pedidosPoints, lucroPoints);
+
+  el.innerHTML =
+    metricBlock('Lucro líquido', lastLucro, fmtReais, lucroPoints, lastLucro>=0?'var(--teal)':'var(--red)') +
+    metricBlock('Investimento ADS', lastInvest, fmtReais, investPoints, 'var(--red)', corrInvest) +
+    metricBlock('CPP geral', lastCpp, fmtReais, cppPoints, 'var(--amber)', corrCpp) +
+    metricBlock('Taxa de conversão', lastTaxaConv, fmtPct, taxaConvPoints, 'var(--blue)', corrTaxaConv) +
+    metricBlock('Ticket médio', lastTicketMedio, fmtReais2, ticketMedioPoints, 'var(--pink)', corrTicketMedio) +
+    metricBlock('Pedidos', lastPedidos, fmtInt, pedidosPoints, 'var(--teal)', corrPedidos);
+}
+
+// ---------- Init ----------
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+loadAllData();
+toggleRoasMode();
+</script>
+</body>
+</html>
