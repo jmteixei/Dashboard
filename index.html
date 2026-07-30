@@ -1490,8 +1490,14 @@ function renderAnaliseCharts(){
     metricBlock('Ticket médio', lastTicketMedio, fmtReais2, ticketMedioPoints, 'var(--pink)', corrTicketMedio) +
     metricBlock('Pedidos', lastPedidos, fmtInt, pedidosPoints, 'var(--teal)', corrPedidos);
 
+  // Impacto exato em R$ do Investimento ADS no período mostrado (não é correlação — é a diferença real, com sinal invertido por ser custo)
+  const investValidPoints = investPoints.filter(p=>p.val!=null);
+  const investImpactoRS = investValidPoints.length>=2
+    ? -(investValidPoints[investValidPoints.length-1].val - investValidPoints[0].val)
+    : null;
+
   renderAnaliseRanking({
-    'Investimento ADS': { corr: corrInvest, esperada: 'negativa' },
+    'Investimento ADS': { corr: corrInvest, esperada: 'negativa', impactoRS: investImpactoRS },
     'CPP geral': { corr: corrCpp, esperada: 'negativa' },
     'Taxa de conversão': { corr: corrTaxaConv, esperada: 'positiva' },
     'Ticket médio': { corr: corrTicketMedio, esperada: 'positiva' },
@@ -1508,7 +1514,7 @@ function renderAnaliseRanking(fatores){
     .map(([label,f])=>{
       const direcaoReal = f.corr>=0 ? 'positiva' : 'negativa';
       const atipico = direcaoReal !== f.esperada && Math.abs(f.corr)>=0.4;
-      return { label, corr:f.corr, direcaoReal, atipico };
+      return { label, corr:f.corr, direcaoReal, atipico, impactoRS: f.impactoRS };
     })
     .sort((a,b)=>Math.abs(b.corr)-Math.abs(a.corr));
 
@@ -1522,10 +1528,17 @@ function renderAnaliseRanking(fatores){
     const abs = Math.abs(f.corr);
     const forca = abs>=0.7?'forte':(abs>=0.4?'moderada':'fraca');
     const cor = f.atipico ? 'var(--amber)' : (abs>=0.7 ? (f.corr>=0?'var(--teal)':'var(--red)') : 'var(--text-muted)');
-    return `<div class="metric-row"><span class="k">${f.label}${f.atipico?' ⚠️':''}</span><span class="v" style="color:${cor};">${f.corr>=0?'+':''}${f.corr.toFixed(2)} (${forca})</span></div>`;
+    const impactoHtml = (f.impactoRS!=null)
+      ? `<div style="font-size:10.5px;color:var(--text-muted);text-align:right;margin-top:2px;">impacto real no período: <span style="color:${f.impactoRS>=0?'var(--teal)':'var(--red)'};">${f.impactoRS>=0?'+':''}R$ ${f.impactoRS.toFixed(0)}</span></div>`
+      : '';
+    return `<div class="metric-row" style="flex-direction:column;align-items:stretch;">
+      <div style="display:flex;justify-content:space-between;"><span class="k">${f.label}${f.atipico?' ⚠️':''}</span><span class="v" style="color:${cor};">${f.corr>=0?'+':''}${f.corr.toFixed(2)} (${forca})</span></div>
+      ${impactoHtml}
+    </div>`;
   }).join('');
 
   const atipicos = lista.filter(f=>f.atipico);
+  const adsItem = lista.find(f=>f.label==='Investimento ADS');
 
   const top = lista[0];
   const second = lista[1];
@@ -1533,6 +1546,9 @@ function renderAnaliseRanking(fatores){
   if(second){
     const forcaSecond = Math.abs(second.corr)>=0.7?'forte':(Math.abs(second.corr)>=0.4?'moderada':'fraca');
     frase += `Em seguida, <b>${second.label}</b> teve correlação ${forcaSecond} (${second.corr>=0?'+':''}${second.corr.toFixed(2)}). `;
+  }
+  if(adsItem && adsItem.impactoRS!=null){
+    frase += `<br><br>Impacto real (não correlação) do Investimento ADS no período: <b style="color:${adsItem.impactoRS>=0?'var(--teal)':'var(--red)'};">${adsItem.impactoRS>=0?'+':''}R$ ${adsItem.impactoRS.toFixed(0)}</b> no lucro.`;
   }
   if(atipicos.length>0){
     frase += `<br><br>⚠️ ${atipicos.map(f=>f.label).join(', ')} veio com direção diferente do esperado — provavelmente coincidência de calendário com o fator dominante, não causa direta. Vale mais confiança conforme o histórico crescer.`;
