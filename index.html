@@ -1528,11 +1528,11 @@ function renderAnaliseRanking(fatores){
   const atipicos = lista.filter(f=>f.atipico);
 
   const top = lista[0];
-  let frase = `O fator com correlação mais forte com o lucro foi <b>${top.label}</b> (${top.corr.toFixed(2)}). `;
-  const adsItem = lista.find(f=>f.label==='Investimento ADS');
-  if(adsItem && adsItem.label!==top.label){
-    const forcaAds = Math.abs(adsItem.corr)>=0.7?'forte':(Math.abs(adsItem.corr)>=0.4?'moderada':'fraca');
-    frase += `Investimento ADS teve correlação ${forcaAds} (${adsItem.corr.toFixed(2)})${forcaAds==='fraca' ? ' — sugere que não foi o principal motor dessa mudança' : ' — parece ter tido papel relevante também'}. `;
+  const second = lista[1];
+  let frase = `O fator com correlação mais forte com o lucro foi <b>${top.label}</b> (${top.corr>=0?'+':''}${top.corr.toFixed(2)}). `;
+  if(second){
+    const forcaSecond = Math.abs(second.corr)>=0.7?'forte':(Math.abs(second.corr)>=0.4?'moderada':'fraca');
+    frase += `Em seguida, <b>${second.label}</b> teve correlação ${forcaSecond} (${second.corr>=0?'+':''}${second.corr.toFixed(2)}). `;
   }
   if(atipicos.length>0){
     frase += `<br><br>⚠️ ${atipicos.map(f=>f.label).join(', ')} veio com direção diferente do esperado — provavelmente coincidência de calendário com o fator dominante, não causa direta. Vale mais confiança conforme o histórico crescer.`;
