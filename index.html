@@ -316,7 +316,7 @@
 
   <!-- ============ ANÁLISE (teste) ============ -->
   <div id="view-analise" class="view">
-    <div class="thresholds-note" style="margin-bottom:12px;">Visão experimental: os gráficos lado a lado, pra você observar a relação entre eles.</div>
+    <button class="btn secondary" onclick="copiarAnaliseDados()" id="copiarAnaliseBtn" style="margin-bottom:14px;">📋 Copiar dados desta tela</button>
     <div id="analiseCharts"></div>
   </div>
 
@@ -1476,6 +1476,50 @@ function renderAnaliseCharts(){
     metricBlock('Taxa de conversão', lastTaxaConv, fmtPct, taxaConvPoints, 'var(--blue)') +
     metricBlock('Ticket médio', lastTicketMedio, fmtReais2, ticketMedioPoints, 'var(--pink)') +
     metricBlock('Pedidos', lastPedidos, fmtInt, pedidosPoints, 'var(--teal)');
+
+  // guarda os dados brutos da janela pra montar o texto do botão "Copiar dados" sem recalcular tudo de novo
+  window._analiseDados = { lucroPoints, investPoints, cppPoints, taxaConvPoints, ticketMedioPoints, pedidosPoints, store: STORE };
+}
+
+function copiarAnaliseDados(){
+  const dados = window._analiseDados;
+  if(!dados){ showToast('Aguarde os gráficos carregarem.'); return; }
+
+  const serie = (pts, fmt) => pts.map(p=>`  ${p.label}: ${p.val==null?'sem dado':fmt(p.val)}`).join('\n');
+  const fmtReais = v => 'R$ '+v.toFixed(2);
+  const fmtPct = v => v.toFixed(2)+'%';
+  const fmtInt = v => String(Math.round(v));
+
+  const texto =
+`Análise ${dados.store.toUpperCase()} — dados dos últimos lançamentos (cada ponto já é uma janela móvel de 7 dias)
+
+Lucro líquido (R$):
+${serie(dados.lucroPoints, fmtReais)}
+
+Investimento ADS (R$):
+${serie(dados.investPoints, fmtReais)}
+
+CPP geral (R$/pedido):
+${serie(dados.cppPoints, fmtReais)}
+
+Taxa de conversão (%):
+${serie(dados.taxaConvPoints, fmtPct)}
+
+Ticket médio (R$):
+${serie(dados.ticketMedioPoints, fmtReais)}
+
+Pedidos:
+${serie(dados.pedidosPoints, fmtInt)}`;
+
+  const btn = document.getElementById('copiarAnaliseBtn');
+  navigator.clipboard.writeText(texto).then(()=>{
+    showToast('Copiado! Pode colar no chat.');
+    const original = btn.textContent;
+    btn.textContent = '✅ Copiado!';
+    setTimeout(()=>{ btn.textContent = original; }, 1800);
+  }).catch(()=>{
+    showToast('Não foi possível copiar automaticamente. Selecione o texto manualmente.');
+  });
 }
 
 // ---------- Init ----------
