@@ -318,6 +318,8 @@
     <div class="alert-box" style="--status-color:var(--amber);margin-bottom:10px;">⚠️ O valor das vendas de pedidos pagos pode sofrer alterações em função de cancelamentos. Para mais detalhes consulte a aba Retorno e Pedidos Cancelados/Cancelamentos na Shopee.</div>
     <div class="alert-box" style="--status-color:var(--amber);margin-bottom:16px;">⚠️ Além das despesas fixas e variáveis, podem ocorrer outras despesas com diferenças de frete, reembolsos por devoluções e outras. Para mais detalhes consulte o extrato dos lançamentos em sua conta Shopee na aba Finanças/Saldo da Carteira.</div>
 
+    <div id="analiseLucroChart"></div>
+
     <div class="section-title">Análise (IA)</div>
     <button class="btn" onclick="gerarAnaliseIA()" id="analiseIABtn">Gerar análise</button>
     <div class="card-block" id="analiseIAResult" style="margin-top:12px;"></div>
@@ -1460,6 +1462,12 @@ function renderAnaliseCharts(){
 
   // guarda os dados brutos da janela pra montar o prompt da IA (os gráficos em si já existem nas abas Receita/ADS/Overview)
   window._analiseDados = { lucroPoints, investPoints, cppPoints, taxaConvPoints, ticketMedioPoints, pedidosPoints, store: STORE };
+
+  const lastLucro = lucroPoints.length ? lucroPoints[lucroPoints.length-1].val : null;
+  const lucroChartEl = document.getElementById('analiseLucroChart');
+  if(lucroChartEl){
+    lucroChartEl.innerHTML = metricBlock('Lucro líquido', lastLucro, v=>'R$ '+v.toFixed(0), lucroPoints, lastLucro>=0?'var(--teal)':'var(--red)');
+  }
 }
 
 
