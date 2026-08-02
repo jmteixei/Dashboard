@@ -436,6 +436,7 @@ function setDespesasSub(name){
 }
 
 function setStore(s){
+  const mudouLoja = (s !== STORE);
   STORE = s;
   document.querySelectorAll('#storeSwitcher button').forEach(b=>b.classList.toggle('active', b.dataset.store===s));
   loadReceitaForm();
@@ -450,8 +451,10 @@ function setStore(s){
   loadRateConfigForm();
   renderPlan();
   renderAnaliseCharts();
-  const iaResultEl = document.getElementById('analiseIAResult');
-  if(iaResultEl) iaResultEl.innerHTML = '';
+  if(mudouLoja){
+    const iaResultEl = document.getElementById('analiseIAResult');
+    if(iaResultEl) iaResultEl.innerHTML = '';
+  }
 }
 
 function setPainelView(v){
