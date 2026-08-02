@@ -1446,6 +1446,7 @@ function renderAnaliseCharts(){
   const adsDates = last7Dates();
   const investPoints = adsDates.map(d=>({ label:d, val: (aggregateAdsForDate(d)||{}).investimento ?? null }));
   const cppPoints = adsDates.map(d=>({ label:d, val: (aggregateAdsForDate(d)||{}).cppGeral ?? null }));
+  const pctAdsPoints = adsDates.map(d=>({ label:d, val: (aggregateAdsForDate(d)||{}).pctAds ?? null }));
   const bizDates = last7BizDates(STORE);
   const taxaConvPoints = bizDates.map(d=>{
     const recs = bizForDate(STORE,d);
@@ -1461,7 +1462,7 @@ function renderAnaliseCharts(){
   });
 
   // guarda os dados brutos da janela pra montar o prompt da IA (os gráficos em si já existem nas abas Receita/ADS/Overview)
-  window._analiseDados = { lucroPoints, investPoints, cppPoints, taxaConvPoints, ticketMedioPoints, pedidosPoints, store: STORE };
+  window._analiseDados = { lucroPoints, investPoints, cppPoints, pctAdsPoints, taxaConvPoints, ticketMedioPoints, pedidosPoints, store: STORE };
 
   const lastLucro = lucroPoints.length ? lucroPoints[lucroPoints.length-1].val : null;
   const lucroChartEl = document.getElementById('analiseLucroChart');
@@ -1492,11 +1493,12 @@ Dados (data: valor):
 - Lucro líquido (R$): ${serie(dados.lucroPoints)}
 - Investimento em ADS (R$): ${serie(dados.investPoints)}
 - CPP geral do ADS (R$ por pedido): ${serie(dados.cppPoints)}
+- % de pedidos via ADS (o restante é orgânico): ${serie(dados.pctAdsPoints)}
 - Taxa de conversão (%): ${serie(dados.taxaConvPoints)}
 - Ticket médio (R$): ${serie(dados.ticketMedioPoints)}
 - Pedidos (contagem, também janela de 7 dias): ${serie(dados.pedidosPoints)}
 
-Escreva uma análise BEM curta e direta, em português do Brasil, com no máximo 3 frases: (1) qual foi o fator dominante por trás da variação do lucro, com o número que sustenta isso; (2) um ponto de atenção, se houver algum sinal indo na direção contrária ao esperado; (3) uma recomendação prática de ação. Não repita todos os números da tabela, cite só os 2-3 mais relevantes. Fale em termos de "sugere"/"parece" (poucos pontos de dado, não é causa comprovada). Não use markdown, não use listas, apenas texto corrido, direto ao ponto, sem introdução.`;
+Escreva uma análise BEM curta e direta, em português do Brasil, com no máximo 3 frases: (1) qual foi o fator dominante por trás da variação do lucro, com o número que sustenta isso; (2) um ponto de atenção, se houver algum sinal indo na direção contrária ao esperado; (3) uma recomendação prática de ação. Se a variação de Pedidos parecer relevante, use o % de pedidos via ADS pra indicar se a mudança veio mais do tráfego pago ou do orgânico. Não repita todos os números da tabela, cite só os 2-3 mais relevantes. Fale em termos de "sugere"/"parece" (poucos pontos de dado, não é causa comprovada). Não use markdown, não use listas, apenas texto corrido, direto ao ponto, sem introdução.`;
 
   try{
     const response = await fetch(WORKER_URL, {
