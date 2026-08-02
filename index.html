@@ -161,7 +161,6 @@
     <div class="section-title">Balanço (últimos 7 dias)</div>
     <div class="card-block" id="balancoBreakdown"></div>
 
-    <div id="lucroRealBlock"></div>
   </div>
 
   <!-- ============ RECEITA ============ -->
@@ -316,7 +315,8 @@
 
   <!-- ============ ANÁLISE (teste) ============ -->
   <div id="view-analise" class="view">
-    <div id="analiseCharts"></div>
+    <div class="alert-box" style="--status-color:var(--amber);margin-bottom:10px;">⚠️ O valor das vendas de pedidos pagos pode sofrer alterações em função de cancelamentos. Para mais detalhes consulte a aba Retorno e Pedidos Cancelados/Cancelamentos na Shopee.</div>
+    <div class="alert-box" style="--status-color:var(--amber);margin-bottom:16px;">⚠️ Além das despesas fixas e variáveis, podem ocorrer outras despesas com diferenças de frete, reembolsos por devoluções e outras. Para mais detalhes consulte o extrato dos lançamentos em sua conta Shopee na aba Finanças/Saldo da Carteira.</div>
 
     <div class="section-title">Análise (IA)</div>
     <button class="btn" onclick="gerarAnaliseIA()" id="analiseIABtn">Gerar análise</button>
@@ -1324,27 +1324,6 @@ function renderPainel(){
   document.getElementById('balancoBreakdown').innerHTML = rows.map(([cls,k,v])=>`
     <div class="metric-row ${cls}"><span class="k">${k}</span><span class="v">${v}</span></div>
   `).join('');
-
-  const realEl = document.getElementById('lucroRealBlock');
-  if(b.temLiquido){
-    const pctVendas = b.vendas ? (b.despesasInvisiveis/b.vendas*100) : null;
-    const gapColor = b.despesasInvisiveis>0 ? 'red' : 'teal';
-    const gapPoints = dailyGapPoints(view);
-    realEl.innerHTML = `
-      <div class="section-title">Despesas invisíveis (Shopee)</div>
-      <div class="card-block">
-        <div class="metric-row"><span class="k">Vendas (7 dias)</span><span class="v">R$ ${b.vendas.toFixed(0)}</span></div>
-        <div class="metric-row"><span class="k">Líquido esperado (só taxas conhecidas)</span><span class="v">R$ ${b.liquidoEsperado.toFixed(0)}</span></div>
-        <div class="metric-row"><span class="k">Líquido recebido de verdade</span><span class="v">R$ ${b.liquidoRecebido.toFixed(0)}</span></div>
-        <div class="metric-row"><span class="k">Despesas invisíveis</span><span class="v ${gapColor}">R$ ${b.despesasInvisiveis.toFixed(0)}${pctVendas!=null?' ('+pctVendas.toFixed(1)+'% das vendas)':''}</span></div>
-        <div class="thresholds-note">Diferença entre o que a Shopee deveria depositar (descontando só comissão, taxa por item e taxa de saque) e o que ela realmente depositou — majoritariamente pedidos cancelados/devolvidos e ajustes que não aparecem em outro lugar.</div>
-      </div>
-      <div class="section-title">Evolução das despesas invisíveis</div>
-      ${metricBlock('Despesas invisíveis', b.despesasInvisiveis, v=>'R$ '+v.toFixed(0), gapPoints, gapColor)}
-    `;
-  } else {
-    realEl.innerHTML = '';
-  }
 }
 
 // ================= PLAN =================
@@ -1461,8 +1440,6 @@ function renderPlan(){
 
 // ================= ANÁLISE (versão teste: só os gráficos juntos) =================
 function renderAnaliseCharts(){
-  const el = document.getElementById('analiseCharts');
-
   const lucroPoints = dailyLucroPointsForStore(STORE);
   const adsDates = last7Dates();
   const investPoints = adsDates.map(d=>({ label:d, val: (aggregateAdsForDate(d)||{}).investimento ?? null }));
@@ -1481,27 +1458,7 @@ function renderAnaliseCharts(){
     return { label:d, val: recs.length ? recs[0].pedidos : null };
   });
 
-  const lastLucro = lucroPoints.length ? lucroPoints[lucroPoints.length-1].val : null;
-  const lastInvest = investPoints.length ? investPoints[investPoints.length-1].val : null;
-  const lastCpp = cppPoints.length ? cppPoints[cppPoints.length-1].val : null;
-  const lastTaxaConv = taxaConvPoints.length ? taxaConvPoints[taxaConvPoints.length-1].val : null;
-  const lastTicketMedio = ticketMedioPoints.length ? ticketMedioPoints[ticketMedioPoints.length-1].val : null;
-  const lastPedidos = pedidosPoints.length ? pedidosPoints[pedidosPoints.length-1].val : null;
-
-  const fmtReais = v => 'R$ '+v.toFixed(0);
-  const fmtReais2 = v => 'R$ '+v.toFixed(2);
-  const fmtPct = v => v.toFixed(2)+'%';
-  const fmtInt = v => v.toFixed(0);
-
-  el.innerHTML =
-    metricBlock('Lucro líquido', lastLucro, fmtReais, lucroPoints, lastLucro>=0?'var(--teal)':'var(--red)') +
-    metricBlock('Investimento ADS', lastInvest, fmtReais, investPoints, 'var(--red)') +
-    metricBlock('CPP geral', lastCpp, fmtReais, cppPoints, 'var(--amber)') +
-    metricBlock('Taxa de conversão', lastTaxaConv, fmtPct, taxaConvPoints, 'var(--blue)') +
-    metricBlock('Ticket médio', lastTicketMedio, fmtReais2, ticketMedioPoints, 'var(--pink)') +
-    metricBlock('Pedidos', lastPedidos, fmtInt, pedidosPoints, 'var(--teal)');
-
-  // guarda os dados brutos da janela pra montar o texto do botão "Copiar dados" sem recalcular tudo de novo
+  // guarda os dados brutos da janela pra montar o prompt da IA (os gráficos em si já existem nas abas Receita/ADS/Overview)
   window._analiseDados = { lucroPoints, investPoints, cppPoints, taxaConvPoints, ticketMedioPoints, pedidosPoints, store: STORE };
 }
 
