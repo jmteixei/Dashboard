@@ -355,6 +355,22 @@ let expandedAdId = null;
 let editingAdId = null;
 
 let CACHE = { ads: [], adEntries: [], dailyBusiness: [], weeklyExpenses: [], plans: [], rateConfig: {} };
+let analiseIACache = {}; // { c4a: 'texto...', c2u: 'texto...' } — invalidado quando salva novo lançamento em Receita/ADS daquela loja
+
+function renderAnaliseIAFromCache(){
+  const resultEl = document.getElementById('analiseIAResult');
+  if(!resultEl) return;
+  const cached = analiseIACache[STORE];
+  resultEl.innerHTML = cached
+    ? `<div style="font-size:13px;line-height:1.6;">${cached}</div>`
+    : '<div class="empty">Nenhuma análise gerada ainda para esta loja.</div>';
+}
+
+function invalidarAnaliseIA(store){
+  delete analiseIACache[store];
+  db.collection('aiAnalysis').doc(store).delete().catch(()=>{});
+  renderAnaliseIAFromCache();
+}
 
 function showToast(msg){
   const t = document.getElementById('toast');
@@ -373,13 +389,14 @@ function numOr(def,id){
 // ---------- Load / persist ----------
 async function loadAllData(){
   try{
-    const [adsSnap, entriesSnap, bizSnap, expSnap, plansSnap, rateSnap] = await Promise.all([
+    const [adsSnap, entriesSnap, bizSnap, expSnap, plansSnap, rateSnap, aiSnap] = await Promise.all([
       db.collection('ads').get(),
       db.collection('adEntries').get(),
       db.collection('dailyBusiness').get(),
       db.collection('weeklyExpenses').get(),
       db.collection('plans').get(),
       db.collection('rateConfig').get(),
+      db.collection('aiAnalysis').get(),
     ]);
     CACHE.ads = adsSnap.docs.map(d=>({ id:d.id, ...d.data() }));
     CACHE.adEntries = entriesSnap.docs.map(d=>({ id:d.id, ...d.data() }));
@@ -388,6 +405,7 @@ async function loadAllData(){
     CACHE.plans = plansSnap.docs.map(d=>({ id:d.id, ...d.data() }));
     CACHE.rateConfig = {};
     rateSnap.docs.forEach(d=>{ CACHE.rateConfig[d.id] = d.data(); });
+    aiSnap.docs.forEach(d=>{ analiseIACache[d.id] = d.data().texto; });
   }catch(e){
     showToast('Erro ao carregar dados. Verifique sua conexão.');
     console.error(e);
@@ -425,7 +443,7 @@ function switchView(name){
   if(name==='despesas'){ loadExpensesForm(); renderExpensesHistory(); renderAutoDespesasBlock(); }
   if(name==='ads'){ renderAdSelect(); loadEntryFormForSelection(); renderResumo(); renderAdsPainel(); renderAdManageList(); }
   if(name==='overview') renderPainel();
-  if(name==='analise') renderAnaliseCharts();
+  if(name==='analise'){ renderAnaliseCharts(); renderAnaliseIAFromCache(); }
 }
 
 function setDespesasSub(name){
@@ -436,7 +454,6 @@ function setDespesasSub(name){
 }
 
 function setStore(s){
-  const mudouLoja = (s !== STORE);
   STORE = s;
   document.querySelectorAll('#storeSwitcher button').forEach(b=>b.classList.toggle('active', b.dataset.store===s));
   loadReceitaForm();
@@ -451,10 +468,7 @@ function setStore(s){
   loadRateConfigForm();
   renderPlan();
   renderAnaliseCharts();
-  if(mudouLoja){
-    const iaResultEl = document.getElementById('analiseIAResult');
-    if(iaResultEl) iaResultEl.innerHTML = '';
-  }
+  renderAnaliseIAFromCache();
 }
 
 function setPainelView(v){
@@ -596,6 +610,7 @@ async function saveReceita(){
     renderAdsPainel();
     renderAutoDespesasBlock();
     renderReceitaCharts();
+    invalidarAnaliseIA(STORE);
   }catch(e){ showToast('Erro ao salvar.'); console.error(e); }
 }
 
@@ -717,6 +732,7 @@ async function saveAdEntry(){
     CACHE.adEntries.push({id, ...data});
     showToast('Registro salvo.');
     renderAdsPainel(); renderResumo();
+    invalidarAnaliseIA(STORE);
   }catch(e){ showToast('Erro ao salvar.'); console.error(e); }
 }
 
@@ -1530,9 +1546,14 @@ Escreva uma análise BEM curta e direta, em português do Brasil, com no máximo
     const data = await response.json();
     if(data.error){ throw new Error(typeof data.error==='string' ? data.error : JSON.stringify(data.error)); }
     const texto = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
-    resultEl.innerHTML = texto
-      ? `<div style="font-size:13px;line-height:1.6;">${escapeHtml(texto).replace(/\n/g,'<br><br>')}</div>`
-      : '<div class="empty">Não foi possível gerar a análise agora. Tente de novo.</div>';
+    if(texto){
+      const textoHtml = escapeHtml(texto).replace(/\n/g,'<br><br>');
+      analiseIACache[dados.store] = textoHtml;
+      db.collection('aiAnalysis').doc(dados.store).set({ store: dados.store, texto: textoHtml, geradoEm: new Date().toISOString() }).catch(err=>console.error('Erro ao salvar análise no Firestore', err));
+      resultEl.innerHTML = `<div style="font-size:13px;line-height:1.6;">${textoHtml}</div>`;
+    } else {
+      resultEl.innerHTML = '<div class="empty">Não foi possível gerar a análise agora. Tente de novo.</div>';
+    }
   }catch(e){
     console.error(e);
     resultEl.innerHTML = `<div class="empty">Erro ao gerar análise: ${escapeHtml(String(e.message||e))}</div>`;
