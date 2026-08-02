@@ -318,6 +318,10 @@
   <div id="view-analise" class="view">
     <button class="btn secondary" onclick="copiarAnaliseDados()" id="copiarAnaliseBtn" style="margin-bottom:14px;">📋 Copiar dados desta tela</button>
     <div id="analiseCharts"></div>
+
+    <div class="section-title">Análise (IA)</div>
+    <button class="btn" onclick="gerarAnaliseIA()" id="analiseIABtn">Gerar análise</button>
+    <div class="card-block" id="analiseIAResult" style="margin-top:12px;"></div>
   </div>
 
 </div>
@@ -1520,6 +1524,58 @@ ${serie(dados.pedidosPoints, fmtInt)}`;
   }).catch(()=>{
     showToast('Não foi possível copiar automaticamente. Selecione o texto manualmente.');
   });
+}
+
+// URL do Worker do Cloudflare que guarda a chave da Anthropic em segredo e repassa a chamada
+const WORKER_URL = "https://painel-ia.jmteixei.workers.dev";
+
+async function gerarAnaliseIA(){
+  const btn = document.getElementById('analiseIABtn');
+  const resultEl = document.getElementById('analiseIAResult');
+  const dados = window._analiseDados;
+  if(!dados){ showToast('Aguarde os gráficos carregarem.'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Analisando...';
+  resultEl.innerHTML = '<div class="empty">Gerando análise, aguarde alguns segundos...</div>';
+
+  const serie = (pts) => pts.map(p=>`${p.label}: ${p.val==null?'sem dado':p.val}`).join(' | ');
+
+  const prompt = `Você está analisando os dados de uma loja de capinhas de celular personalizadas na Shopee (loja: ${dados.store.toUpperCase()}), ao longo dos últimos lançamentos diários (cada lançamento reflete uma janela móvel de 7 dias, então compare a evolução ponto a ponto, não os dias como se fossem independentes).
+
+Dados (data: valor):
+- Lucro líquido (R$): ${serie(dados.lucroPoints)}
+- Investimento em ADS (R$): ${serie(dados.investPoints)}
+- CPP geral do ADS (R$ por pedido): ${serie(dados.cppPoints)}
+- Taxa de conversão (%): ${serie(dados.taxaConvPoints)}
+- Ticket médio (R$): ${serie(dados.ticketMedioPoints)}
+- Pedidos (contagem, também janela de 7 dias): ${serie(dados.pedidosPoints)}
+
+Escreva uma análise curta (4 a 6 frases, em português do Brasil) explicando o que provavelmente mais influenciou a variação do Lucro Líquido nesse período, cruzando os dados acima. Seja direto e específico com números quando fizer sentido. Evite afirmar causa e efeito com certeza absoluta — são poucos pontos de dado, então fale em termos de "sugere", "parece", "vale investigar". Se dois fatores mudaram ao mesmo tempo, mencione que pode haver mistura de efeitos. Termine com uma recomendação prática de uma frase. Não use markdown, não use listas, apenas texto corrido.`;
+
+  try{
+    const response = await fetch(WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: prompt }],
+      })
+    });
+    const data = await response.json();
+    if(data.error){ throw new Error(typeof data.error==='string' ? data.error : JSON.stringify(data.error)); }
+    const texto = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+    resultEl.innerHTML = texto
+      ? `<div style="font-size:13px;line-height:1.6;">${escapeHtml(texto).replace(/\n/g,'<br><br>')}</div>`
+      : '<div class="empty">Não foi possível gerar a análise agora. Tente de novo.</div>';
+  }catch(e){
+    console.error(e);
+    resultEl.innerHTML = `<div class="empty">Erro ao gerar análise: ${escapeHtml(String(e.message||e))}</div>`;
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Gerar análise';
+  }
 }
 
 // ---------- Init ----------
