@@ -316,7 +316,6 @@
 
   <!-- ============ ANÁLISE (teste) ============ -->
   <div id="view-analise" class="view">
-    <button class="btn secondary" onclick="copiarAnaliseDados()" id="copiarAnaliseBtn" style="margin-bottom:14px;">📋 Copiar dados desta tela</button>
     <div id="analiseCharts"></div>
 
     <div class="section-title">Análise (IA)</div>
@@ -451,6 +450,8 @@ function setStore(s){
   loadRateConfigForm();
   renderPlan();
   renderAnaliseCharts();
+  const iaResultEl = document.getElementById('analiseIAResult');
+  if(iaResultEl) iaResultEl.innerHTML = '';
 }
 
 function setPainelView(v){
@@ -1485,46 +1486,6 @@ function renderAnaliseCharts(){
   window._analiseDados = { lucroPoints, investPoints, cppPoints, taxaConvPoints, ticketMedioPoints, pedidosPoints, store: STORE };
 }
 
-function copiarAnaliseDados(){
-  const dados = window._analiseDados;
-  if(!dados){ showToast('Aguarde os gráficos carregarem.'); return; }
-
-  const serie = (pts, fmt) => pts.map(p=>`  ${p.label}: ${p.val==null?'sem dado':fmt(p.val)}`).join('\n');
-  const fmtReais = v => 'R$ '+v.toFixed(2);
-  const fmtPct = v => v.toFixed(2)+'%';
-  const fmtInt = v => String(Math.round(v));
-
-  const texto =
-`Análise ${dados.store.toUpperCase()} — dados dos últimos lançamentos (cada ponto já é uma janela móvel de 7 dias)
-
-Lucro líquido (R$):
-${serie(dados.lucroPoints, fmtReais)}
-
-Investimento ADS (R$):
-${serie(dados.investPoints, fmtReais)}
-
-CPP geral (R$/pedido):
-${serie(dados.cppPoints, fmtReais)}
-
-Taxa de conversão (%):
-${serie(dados.taxaConvPoints, fmtPct)}
-
-Ticket médio (R$):
-${serie(dados.ticketMedioPoints, fmtReais)}
-
-Pedidos:
-${serie(dados.pedidosPoints, fmtInt)}`;
-
-  const btn = document.getElementById('copiarAnaliseBtn');
-  navigator.clipboard.writeText(texto).then(()=>{
-    showToast('Copiado! Pode colar no chat.');
-    const original = btn.textContent;
-    btn.textContent = '✅ Copiado!';
-    setTimeout(()=>{ btn.textContent = original; }, 1800);
-  }).catch(()=>{
-    showToast('Não foi possível copiar automaticamente. Selecione o texto manualmente.');
-  });
-}
 
 // URL do Worker do Cloudflare que guarda a chave da Anthropic em segredo e repassa a chamada
 const WORKER_URL = "https://painel-ia.jmteixei.workers.dev";
@@ -1551,7 +1512,7 @@ Dados (data: valor):
 - Ticket médio (R$): ${serie(dados.ticketMedioPoints)}
 - Pedidos (contagem, também janela de 7 dias): ${serie(dados.pedidosPoints)}
 
-Escreva uma análise curta (4 a 6 frases, em português do Brasil) explicando o que provavelmente mais influenciou a variação do Lucro Líquido nesse período, cruzando os dados acima. Seja direto e específico com números quando fizer sentido. Evite afirmar causa e efeito com certeza absoluta — são poucos pontos de dado, então fale em termos de "sugere", "parece", "vale investigar". Se dois fatores mudaram ao mesmo tempo, mencione que pode haver mistura de efeitos. Termine com uma recomendação prática de uma frase. Não use markdown, não use listas, apenas texto corrido.`;
+Escreva uma análise BEM curta e direta, em português do Brasil, com no máximo 3 frases: (1) qual foi o fator dominante por trás da variação do lucro, com o número que sustenta isso; (2) um ponto de atenção, se houver algum sinal indo na direção contrária ao esperado; (3) uma recomendação prática de ação. Não repita todos os números da tabela, cite só os 2-3 mais relevantes. Fale em termos de "sugere"/"parece" (poucos pontos de dado, não é causa comprovada). Não use markdown, não use listas, apenas texto corrido, direto ao ponto, sem introdução.`;
 
   try{
     const response = await fetch(WORKER_URL, {
@@ -1559,7 +1520,7 @@ Escreva uma análise curta (4 a 6 frases, em português do Brasil) explicando o 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 1000,
+        max_tokens: 350,
         messages: [{ role: "user", content: prompt }],
       })
     });
