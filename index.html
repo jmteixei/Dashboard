@@ -175,7 +175,6 @@
       <div class="field"><label>Pedidos</label><input type="number" id="bPedidos" placeholder="0"></div>
       <div class="field"><label>Ticket médio (R$)</label><input type="number" step="0.01" id="bTicketMedio" placeholder="0,00"></div>
       <div class="field"><label>Taxa de conversão (%)</label><input type="number" step="0.01" id="bTaxaConversao" placeholder="0,00"></div>
-      <div class="field"><label>Líquido recebido da Shopee (R$, valor do dia)</label><input type="number" step="0.01" id="bLiquidoRecebido" placeholder="0,00"></div>
     </div>
     <button class="btn" onclick="saveReceita()">Salvar</button>
 
@@ -604,7 +603,7 @@ function bizId(store,date){ return `${store}_${date}`; }
 function loadReceitaForm(){
   const date = document.getElementById('bData').value;
   const existing = CACHE.dailyBusiness.find(b=>b.store===STORE && b.date===date);
-  const fields = { bVendas:'vendas', bPedidos:'pedidos', bTicketMedio:'ticketMedio', bTaxaConversao:'taxaConversao', bLiquidoRecebido:'liquidoRecebido' };
+  const fields = { bVendas:'vendas', bPedidos:'pedidos', bTicketMedio:'ticketMedio', bTaxaConversao:'taxaConversao' };
   Object.keys(fields).forEach(id=>{
     document.getElementById(id).value = existing ? (existing[fields[id]] || '') : '';
   });
@@ -624,14 +623,11 @@ function renderReceitaCharts(){
   const fmtInt = v => v.toFixed(0);
   const fmtPct = v => v.toFixed(2)+'%';
   const pts = (key) => dates.map((d,i)=>({ label:d, val: recs[i] ? recs[i][key] : null }));
-  const liquidoPoints = pts('liquidoRecebido');
-  const liquidoAcumulado = liquidoPoints.reduce((s,p)=> s + (p.val||0), 0);
   el.innerHTML =
     metricBlock('Vendas', last?last.vendas:null, fmtReais, pts('vendas'), 'var(--pink)') +
     metricBlock('Pedidos', last?last.pedidos:null, fmtInt, pts('pedidos'), 'var(--amber)') +
     metricBlock('Ticket médio', last?last.ticketMedio:null, fmtReais, pts('ticketMedio'), 'var(--teal)') +
-    metricBlock('Taxa de conversão', last?last.taxaConversao:null, fmtPct, pts('taxaConversao'), 'var(--blue)') +
-    metricBlock('Líquido recebido (acumulado)', liquidoAcumulado, fmtReais, liquidoPoints, 'var(--red)');
+    metricBlock('Taxa de conversão', last?last.taxaConversao:null, fmtPct, pts('taxaConversao'), 'var(--blue)');
 }
 
 async function saveReceita(){
@@ -643,7 +639,6 @@ async function saveReceita(){
     pedidos: numOr(0,'bPedidos'),
     ticketMedio: numOr(0,'bTicketMedio'),
     taxaConversao: numOr(0,'bTaxaConversao'),
-    liquidoRecebido: numOr(0,'bLiquidoRecebido'),
   };
   const id = bizId(STORE,date);
   try{
