@@ -256,6 +256,14 @@
       <div class="field"><label>Conversões (pedidos)</label><input type="number" id="fConversoes" placeholder="0"></div>
       <div class="field"><label>Faturamento (R$)</label><input type="number" step="0.01" id="fVendas" placeholder="0,00"></div>
       <div class="field"><label>ROAS (informado pela plataforma)</label><input type="number" step="0.01" id="fRoas" placeholder="0.00"></div>
+      <div class="field">
+        <label>Orçamento diário (R$)</label>
+        <input type="number" step="0.01" id="fOrcamento" placeholder="0,00">
+        <label style="display:flex;align-items:center;gap:6px;margin-top:6px;text-transform:none;font-size:12px;color:var(--text);">
+          <input type="checkbox" id="fOrcamentoIlimitado" onchange="toggleOrcamentoIlimitado()" style="width:auto;">
+          Orçamento ilimitado
+        </label>
+      </div>
       <button class="btn" onclick="saveAdEntry()">Salvar</button>
       <div class="thresholds-note">CPP = Investimento ÷ Conversões (calculado automaticamente). Usa a mesma data selecionada na aba Receita.</div>
     </div>
@@ -323,6 +331,7 @@
     <div class="section-title">Análise (IA)</div>
     <button class="btn" onclick="gerarAnaliseIA()" id="analiseIABtn">Gerar análise</button>
     <div class="card-block" id="analiseIAResult" style="margin-top:12px;"></div>
+    <div id="analiseIAMiniCharts"></div>
   </div>
 
 </div>
@@ -366,6 +375,39 @@ function renderAnaliseIAFromCache(){
   resultEl.innerHTML = cached
     ? `<div style="font-size:13px;line-height:1.6;">${cached}</div>`
     : '<div class="empty">Nenhuma análise gerada ainda para esta loja.</div>';
+  renderAnaliseIAMiniCharts(cached || '');
+}
+
+// Detecta quais variáveis a IA citou no texto e desenha um mini-gráfico de cada uma logo abaixo,
+// pra ajudar o vendedor menos experiente a visualizar o que está sendo explicado.
+function renderAnaliseIAMiniCharts(texto){
+  const miniEl = document.getElementById('analiseIAMiniCharts');
+  if(!miniEl) return;
+  const dados = window._analiseDados;
+  if(!texto || !dados){ miniEl.innerHTML = ''; return; }
+
+  const t = texto.toLowerCase();
+  const defs = [
+    { label:'Ticket médio', test:/ticket m[eé]dio/, points:dados.ticketMedioPoints, fmt:v=>'R$ '+v.toFixed(2), color:'var(--pink)' },
+    { label:'% de pedidos via ADS', test:/pedidos via ads|% de pedidos|tr[aá]fego pago/, points:dados.pctAdsPoints, fmt:v=>v.toFixed(1)+'%', color:'var(--pink)' },
+    { label:'Investimento ADS', test:/investimento( em)? ads|investimento em an[uú]ncios/, points:dados.investPoints, fmt:v=>'R$ '+v.toFixed(0), color:'var(--red)' },
+    { label:'CPP geral', test:/\bcpp\b/, points:dados.cppPoints, fmt:v=>'R$ '+v.toFixed(2), color:'var(--amber)' },
+    { label:'Taxa de conversão', test:/taxa de convers[aã]o|convers[aã]o/, points:dados.taxaConvPoints, fmt:v=>v.toFixed(2)+'%', color:'var(--blue)' },
+    { label:'Pedidos', test:/\bpedidos\b/, points:dados.pedidosPoints, fmt:v=>String(Math.round(v)), color:'var(--teal)' },
+  ];
+
+  const encontrados = defs.filter(d => d.test.test(t) && d.points && d.points.some(p=>p.val!=null));
+  if(encontrados.length===0){ miniEl.innerHTML = ''; return; }
+
+  miniEl.innerHTML = encontrados.map(d=>{
+    const last = [...d.points].reverse().find(p=>p.val!=null);
+    return `
+      <div class="metric-block" style="padding:8px 10px;margin-bottom:6px;">
+        <div class="top" style="margin-bottom:3px;"><span class="label" style="font-size:11px;">${d.label}</span><span class="value" style="font-size:13px;">${last?d.fmt(last.val):'—'}</span></div>
+        ${sparklineSVG(d.points, d.color, 36)}
+      </div>
+    `;
+  }).join('');
 }
 
 function invalidarAnaliseIA(store){
@@ -432,6 +474,7 @@ function renderEverything(){
   loadRateConfigForm();
   renderPlan();
   renderAnaliseCharts();
+  renderAnaliseIAFromCache();
 }
 
 // ---------- Navigation ----------
@@ -491,12 +534,12 @@ function setAdsSub(name){
 }
 
 // ---------- Sparkline ----------
-function sparklineSVG(points, color){
+function sparklineSVG(points, color, height){
   const valid = points.filter(p=>p.val!=null && !isNaN(p.val));
   if(valid.length<2){
     return `<div style="font-size:11px;color:var(--text-muted);padding:6px 0;">Aguardando mais dados para o gráfico.</div>`;
   }
-  const w=280, h=64, padX=6, padY=8;
+  const w=280, h=height||64, padX=6, padY=8;
   const vals = valid.map(p=>p.val);
   const min = Math.min(...vals), max = Math.max(...vals);
   const range = (max-min) || Math.max(1, Math.abs(max)*0.1) || 1;
@@ -699,8 +742,17 @@ function renderAdSelect(){
 }
 
 // ================= ADS: lançar dados diários =================
+function toggleOrcamentoIlimitado(){
+  const ilimitado = document.getElementById('fOrcamentoIlimitado').checked;
+  const orcField = document.getElementById('fOrcamento');
+  orcField.disabled = ilimitado;
+  if(ilimitado) orcField.value = '';
+}
+
 function clearEntryForm(){
-  ['fInvestimento','fConversoes','fVendas','fRoas'].forEach(id=>{ document.getElementById(id).value = ''; });
+  ['fInvestimento','fConversoes','fVendas','fRoas','fOrcamento'].forEach(id=>{ document.getElementById(id).value = ''; });
+  document.getElementById('fOrcamentoIlimitado').checked = false;
+  toggleOrcamentoIlimitado();
 }
 function loadEntryFormForSelection(){
   const adId = document.getElementById('entryAdSelect').value;
@@ -711,6 +763,9 @@ function loadEntryFormForSelection(){
     document.getElementById('fConversoes').value = existing.conversoes || '';
     document.getElementById('fVendas').value = existing.vendas || '';
     document.getElementById('fRoas').value = existing.roasPlataforma || '';
+    document.getElementById('fOrcamentoIlimitado').checked = !!existing.orcamentoIlimitado;
+    toggleOrcamentoIlimitado();
+    document.getElementById('fOrcamento').value = existing.orcamentoIlimitado ? '' : (existing.orcamento || '');
   } else {
     clearEntryForm();
   }
@@ -726,6 +781,8 @@ async function saveAdEntry(){
     conversoes: numOr(0,'fConversoes'),
     vendas: numOr(0,'fVendas'),
     roasPlataforma: numOr(0,'fRoas'),
+    orcamento: document.getElementById('fOrcamentoIlimitado').checked ? null : numOr(0,'fOrcamento'),
+    orcamentoIlimitado: document.getElementById('fOrcamentoIlimitado').checked,
   };
   const id = `${STORE}_${adId}_${date}`;
   try{
@@ -925,7 +982,8 @@ function renderResumo(){
     const vendas = vendasDe(last);
     const roas = investimento ? (vendas/investimento) : null;
     const cppVal = pedidos ? (investimento/pedidos) : null;
-    return { ad, hasData:true, pedidos, vendas, investimento, roas, cpp:cppVal };
+    const orcamento = last.orcamentoIlimitado ? 'Ilimitado' : (last.orcamento || null);
+    return { ad, hasData:true, pedidos, vendas, investimento, roas, cpp:cppVal, orcamento };
   });
   let totPedidos=0, totVendas=0, totInvestimento=0;
   rowsData.forEach(r=>{
@@ -936,19 +994,20 @@ function renderResumo(){
   const totCpp = totPedidos ? (totInvestimento/totPedidos) : null;
   const fmt = (v, prefix='', suffix='', dec=2) => v==null ? '—' : prefix+v.toFixed(dec)+suffix;
   const bodyRows = rowsData.map(r=>{
-    if(!r.hasData) return `<tr><td>${escapeHtml(r.ad.name)}</td><td colspan="5" style="text-align:left;color:var(--text-muted);">sem registros</td></tr>`;
+    if(!r.hasData) return `<tr><td>${escapeHtml(r.ad.name)}</td><td colspan="6" style="text-align:left;color:var(--text-muted);">sem registros</td></tr>`;
     return `<tr>
       <td>${escapeHtml(r.ad.name)}</td>
       <td class="hl">${r.pedidos}</td>
       <td>${fmt(r.vendas,'R$ ')}</td>
       <td>${fmt(r.investimento,'R$ ')}</td>
+      <td>${typeof r.orcamento==='string' ? r.orcamento : fmt(r.orcamento,'R$ ')}</td>
       <td>${fmt(r.roas,'','x',2)}</td>
       <td class="hl">${fmt(r.cpp,'R$ ')}</td>
     </tr>`;
   }).join('');
   wrap.innerHTML = `
     <table class="resumo-table">
-      <thead><tr><th>Anúncio</th><th class="hl">Pedidos</th><th>Faturamento</th><th>Investimento</th><th>ROAS</th><th class="hl">CPP</th></tr></thead>
+      <thead><tr><th>Anúncio</th><th class="hl">Pedidos</th><th>Faturamento</th><th>Investimento</th><th>Orçamento</th><th>ROAS</th><th class="hl">CPP</th></tr></thead>
       <tbody>
         ${bodyRows}
         <tr class="totals">
@@ -956,6 +1015,7 @@ function renderResumo(){
           <td class="hl">${totPedidos}</td>
           <td>${fmt(totVendas,'R$ ')}</td>
           <td>${fmt(totInvestimento,'R$ ')}</td>
+          <td></td>
           <td>${fmt(totRoas,'','x',2)}</td>
           <td class="hl">${fmt(totCpp,'R$ ')}</td>
         </tr>
@@ -1484,6 +1544,7 @@ async function gerarAnaliseIA(){
   btn.disabled = true;
   btn.textContent = 'Analisando...';
   resultEl.innerHTML = '<div class="empty">Gerando análise, aguarde alguns segundos...</div>';
+  document.getElementById('analiseIAMiniCharts').innerHTML = '';
 
   const serie = (pts) => pts.map(p=>`${p.label}: ${p.val==null?'sem dado':p.val}`).join(' | ');
 
@@ -1518,8 +1579,10 @@ Escreva uma análise BEM curta e direta, em português do Brasil, com no máximo
       analiseIACache[dados.store] = textoHtml;
       db.collection('aiAnalysis').doc(dados.store).set({ store: dados.store, texto: textoHtml, geradoEm: new Date().toISOString() }).catch(err=>console.error('Erro ao salvar análise no Firestore', err));
       resultEl.innerHTML = `<div style="font-size:13px;line-height:1.6;">${textoHtml}</div>`;
+      renderAnaliseIAMiniCharts(textoHtml);
     } else {
       resultEl.innerHTML = '<div class="empty">Não foi possível gerar a análise agora. Tente de novo.</div>';
+      document.getElementById('analiseIAMiniCharts').innerHTML = '';
     }
   }catch(e){
     console.error(e);
@@ -1538,6 +1601,7 @@ if('serviceWorker' in navigator){
 }
 loadAllData();
 toggleRoasMode();
+toggleOrcamentoIlimitado();
 </script>
 </body>
 </html>
