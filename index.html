@@ -367,14 +367,33 @@ let editingAdId = null;
 let CACHE = { ads: [], adEntries: [], dailyBusiness: [], weeklyExpenses: [], plans: [], rateConfig: {} };
 let analiseIACache = {}; // { c4a: 'texto...', c2u: 'texto...' } — invalidado quando salva novo lançamento em Receita/ADS daquela loja
 
-function renderAnaliseIAFromCache(){
+function renderAnaliseIAItemizado(obj){
   const resultEl = document.getElementById('analiseIAResult');
   if(!resultEl) return;
+  if(!obj){
+    resultEl.innerHTML = '<div class="empty">Nenhuma análise gerada ainda para esta loja.</div>';
+    return;
+  }
+  const itens = [
+    { icon:'🎯', label:'Fator dominante', texto: obj.fatorDominante, color:'var(--teal)' },
+    { icon:'⚠️', label:'Ponto de atenção', texto: obj.pontoAtencao, color:'var(--amber)' },
+    { icon:'💡', label:'Recomendação', texto: obj.recomendacao, color:'var(--pink)' },
+    { icon:'🏆', label:'Meta', texto: obj.meta, color:'var(--blue)' },
+  ].filter(i => i.texto && i.texto.trim());
+
+  resultEl.innerHTML = itens.map(i => `
+    <div class="alert-box" style="--status-color:${i.color};margin-bottom:8px;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:${i.color};font-weight:600;margin-bottom:4px;">${i.icon} ${i.label}</div>
+      <div style="font-size:13px;line-height:1.5;">${i.texto}</div>
+    </div>
+  `).join('');
+}
+
+function renderAnaliseIAFromCache(){
   const cached = analiseIACache[STORE];
-  resultEl.innerHTML = cached
-    ? `<div style="font-size:13px;line-height:1.6;">${cached}</div>`
-    : '<div class="empty">Nenhuma análise gerada ainda para esta loja.</div>';
-  renderAnaliseIAMiniCharts(cached || '');
+  renderAnaliseIAItemizado(cached);
+  const textoConcat = cached ? [cached.fatorDominante, cached.pontoAtencao, cached.recomendacao, cached.meta].filter(Boolean).join(' ') : '';
+  renderAnaliseIAMiniCharts(textoConcat);
 }
 
 // Detecta quais variáveis a IA citou no texto e desenha um mini-gráfico de cada uma logo abaixo,
@@ -448,7 +467,10 @@ async function loadAllData(){
     CACHE.plans = plansSnap.docs.map(d=>({ id:d.id, ...d.data() }));
     CACHE.rateConfig = {};
     rateSnap.docs.forEach(d=>{ CACHE.rateConfig[d.id] = d.data(); });
-    aiSnap.docs.forEach(d=>{ analiseIACache[d.id] = d.data().texto; });
+    aiSnap.docs.forEach(d=>{
+      const v = d.data();
+      analiseIACache[d.id] = { fatorDominante:v.fatorDominante, pontoAtencao:v.pontoAtencao, recomendacao:v.recomendacao, meta:v.meta };
+    });
   }catch(e){
     showToast('Erro ao carregar dados. Verifique sua conexão.');
     console.error(e);
@@ -1563,8 +1585,8 @@ async function gerarAnaliseIA(){
     : '';
 
   const instrucaoMeta = dados.planInfo
-    ? ' (4) uma frase final conectando com a meta de lucro: diga se o investimento necessário calculado está próximo ou distante do investimento atual, e alerte que só aumentar investimento pode não resolver se o motor real da mudança (identificado no item 1) foi outro fator, não o ADS.'
-    : '';
+    ? ' No campo "meta", uma frase conectando com a meta de lucro: diga se o investimento necessário calculado está próximo ou distante do investimento atual, e alerte que só aumentar investimento pode não resolver se o motor real da mudança (identificado em "fatorDominante") foi outro fator, não o ADS.'
+    : ' Omita o campo "meta" (deixe como string vazia) — não há meta definida.';
 
   const prompt = `Você está analisando os dados de uma loja de capinhas de celular personalizadas na Shopee (loja: ${dados.store.toUpperCase()}), ao longo dos últimos lançamentos diários (cada lançamento reflete uma janela móvel de 7 dias, então compare a evolução ponto a ponto, não os dias como se fossem independentes).
 
@@ -1577,7 +1599,15 @@ Dados (data: valor):
 - Ticket médio (R$): ${serie(dados.ticketMedioPoints)}
 - Pedidos (contagem, também janela de 7 dias): ${serie(dados.pedidosPoints)}${metaTexto}
 
-Escreva uma análise BEM curta e direta, em português do Brasil, com no máximo ${dados.planInfo?'4':'3'} frases: (1) qual foi o fator dominante por trás da variação do lucro, com o número que sustenta isso; (2) um ponto de atenção, se houver algum sinal indo na direção contrária ao esperado; (3) uma recomendação prática de ação.${instrucaoMeta} Se a variação de Pedidos parecer relevante, use o % de pedidos via ADS pra indicar se a mudança veio mais do tráfego pago ou do orgânico. Não repita todos os números da tabela, cite só os 2-3 mais relevantes. Fale em termos de "sugere"/"parece" (poucos pontos de dado, não é causa comprovada). Não use markdown, não use listas, apenas texto corrido, direto ao ponto, sem introdução.`;
+Responda SOMENTE com um objeto JSON válido, sem markdown, sem \`\`\`, sem texto antes ou depois, com exatamente estes campos (cada um é uma string curta, 1 frase, em português do Brasil, direto ao ponto, sem introdução, sem repetir todos os números da tabela — só os 2-3 mais relevantes, falando em termos de "sugere"/"parece" já que são poucos pontos de dado):
+
+{
+  "fatorDominante": "qual foi o fator dominante por trás da variação do lucro, com o número que sustenta isso",
+  "pontoAtencao": "um ponto de atenção, se houver algum sinal indo na direção contrária ao esperado — string vazia se não houver nenhum",
+  "recomendacao": "uma recomendação prática de ação. Se a variação de Pedidos parecer relevante, use o % de pedidos via ADS pra indicar se a mudança veio mais do tráfego pago ou do orgânico",
+  "meta": "string vazia, ou a frase sobre a meta conforme instrução abaixo"
+}
+${instrucaoMeta}`;
 
   try{
     const response = await fetch(WORKER_URL, {
@@ -1592,16 +1622,19 @@ Escreva uma análise BEM curta e direta, em português do Brasil, com no máximo
     const data = await response.json();
     if(data.error){ throw new Error(typeof data.error==='string' ? data.error : JSON.stringify(data.error)); }
     const texto = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
-    if(texto){
-      const textoHtml = escapeHtml(texto).replace(/\n/g,'<br><br>');
-      analiseIACache[dados.store] = textoHtml;
-      db.collection('aiAnalysis').doc(dados.store).set({ store: dados.store, texto: textoHtml, geradoEm: new Date().toISOString() }).catch(err=>console.error('Erro ao salvar análise no Firestore', err));
-      resultEl.innerHTML = `<div style="font-size:13px;line-height:1.6;">${textoHtml}</div>`;
-      renderAnaliseIAMiniCharts(textoHtml);
-    } else {
-      resultEl.innerHTML = '<div class="empty">Não foi possível gerar a análise agora. Tente de novo.</div>';
-      document.getElementById('analiseIAMiniCharts').innerHTML = '';
-    }
+    const jsonMatch = texto.match(/\{[\s\S]*\}/);
+    if(!jsonMatch) throw new Error('Resposta da IA não veio em formato reconhecível.');
+    const parsed = JSON.parse(jsonMatch[0]);
+    const obj = {
+      fatorDominante: parsed.fatorDominante ? escapeHtml(String(parsed.fatorDominante)) : '',
+      pontoAtencao: parsed.pontoAtencao ? escapeHtml(String(parsed.pontoAtencao)) : '',
+      recomendacao: parsed.recomendacao ? escapeHtml(String(parsed.recomendacao)) : '',
+      meta: parsed.meta ? escapeHtml(String(parsed.meta)) : '',
+    };
+    analiseIACache[dados.store] = obj;
+    db.collection('aiAnalysis').doc(dados.store).set({ store: dados.store, ...obj, geradoEm: new Date().toISOString() }).catch(err=>console.error('Erro ao salvar análise no Firestore', err));
+    renderAnaliseIAItemizado(obj);
+    renderAnaliseIAMiniCharts([obj.fatorDominante, obj.pontoAtencao, obj.recomendacao, obj.meta].filter(Boolean).join(' '));
   }catch(e){
     console.error(e);
     resultEl.innerHTML = `<div class="empty">Erro ao gerar análise: ${escapeHtml(String(e.message||e))}</div>`;
