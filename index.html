@@ -1516,8 +1516,23 @@ function renderAnaliseCharts(){
     return { label:d, val: recs.length ? recs[0].pedidos : null };
   });
 
+  // Se houver uma meta salva no Plan, calcula o cenário "Esperado" (CPP atual) pra dar contexto de meta na análise
+  let planInfo = null;
+  const plan = CACHE.plans.find(p=>p.store===STORE);
+  if(plan){
+    const p = planParamsForStore(STORE);
+    if(p.cpp!=null && p.pAdsPct!=null && p.ticketMedio!=null){
+      const pAdsFrac = p.pAdsPct/100;
+      const r = calcPlanScenario(STORE, plan.meta, p.despesasFixas, p.proLabore, p.cpp, pAdsFrac, p.ticketMedio);
+      if(r){
+        const investimentoAtual = investPoints.length ? investPoints[investPoints.length-1].val : null;
+        planInfo = { meta: plan.meta, investimentoNecessario: r.investimento, investimentoAtual };
+      }
+    }
+  }
+
   // guarda os dados brutos da janela pra montar o prompt da IA (os gráficos em si já existem nas abas Receita/ADS/Overview)
-  window._analiseDados = { lucroPoints, investPoints, cppPoints, pctAdsPoints, taxaConvPoints, ticketMedioPoints, pedidosPoints, store: STORE };
+  window._analiseDados = { lucroPoints, investPoints, cppPoints, pctAdsPoints, taxaConvPoints, ticketMedioPoints, pedidosPoints, planInfo, store: STORE };
 
   const lastLucro = lucroPoints.length ? lucroPoints[lucroPoints.length-1].val : null;
   const lucroChartEl = document.getElementById('analiseLucroChart');
@@ -1543,6 +1558,14 @@ async function gerarAnaliseIA(){
 
   const serie = (pts) => pts.map(p=>`${p.label}: ${p.val==null?'sem dado':p.val}`).join(' | ');
 
+  const metaTexto = dados.planInfo
+    ? `\n\nMeta de lucro líquido definida (últimos 7 dias): R$ ${dados.planInfo.meta.toFixed(0)}. Segundo o Plan (cenário esperado, mantendo CPP e % ADS atuais), o Investimento em ADS necessário pra bater essa meta seria de R$ ${dados.planInfo.investimentoNecessario.toFixed(0)}${dados.planInfo.investimentoAtual!=null ? ' (o investimento atual está em R$ '+dados.planInfo.investimentoAtual.toFixed(0)+')' : ''}.`
+    : '';
+
+  const instrucaoMeta = dados.planInfo
+    ? ' (4) uma frase final conectando com a meta de lucro: diga se o investimento necessário calculado está próximo ou distante do investimento atual, e alerte que só aumentar investimento pode não resolver se o motor real da mudança (identificado no item 1) foi outro fator, não o ADS.'
+    : '';
+
   const prompt = `Você está analisando os dados de uma loja de capinhas de celular personalizadas na Shopee (loja: ${dados.store.toUpperCase()}), ao longo dos últimos lançamentos diários (cada lançamento reflete uma janela móvel de 7 dias, então compare a evolução ponto a ponto, não os dias como se fossem independentes).
 
 Dados (data: valor):
@@ -1552,9 +1575,9 @@ Dados (data: valor):
 - % de pedidos via ADS (o restante é orgânico): ${serie(dados.pctAdsPoints)}
 - Taxa de conversão (%): ${serie(dados.taxaConvPoints)}
 - Ticket médio (R$): ${serie(dados.ticketMedioPoints)}
-- Pedidos (contagem, também janela de 7 dias): ${serie(dados.pedidosPoints)}
+- Pedidos (contagem, também janela de 7 dias): ${serie(dados.pedidosPoints)}${metaTexto}
 
-Escreva uma análise BEM curta e direta, em português do Brasil, com no máximo 3 frases: (1) qual foi o fator dominante por trás da variação do lucro, com o número que sustenta isso; (2) um ponto de atenção, se houver algum sinal indo na direção contrária ao esperado; (3) uma recomendação prática de ação. Se a variação de Pedidos parecer relevante, use o % de pedidos via ADS pra indicar se a mudança veio mais do tráfego pago ou do orgânico. Não repita todos os números da tabela, cite só os 2-3 mais relevantes. Fale em termos de "sugere"/"parece" (poucos pontos de dado, não é causa comprovada). Não use markdown, não use listas, apenas texto corrido, direto ao ponto, sem introdução.`;
+Escreva uma análise BEM curta e direta, em português do Brasil, com no máximo ${dados.planInfo?'4':'3'} frases: (1) qual foi o fator dominante por trás da variação do lucro, com o número que sustenta isso; (2) um ponto de atenção, se houver algum sinal indo na direção contrária ao esperado; (3) uma recomendação prática de ação.${instrucaoMeta} Se a variação de Pedidos parecer relevante, use o % de pedidos via ADS pra indicar se a mudança veio mais do tráfego pago ou do orgânico. Não repita todos os números da tabela, cite só os 2-3 mais relevantes. Fale em termos de "sugere"/"parece" (poucos pontos de dado, não é causa comprovada). Não use markdown, não use listas, apenas texto corrido, direto ao ponto, sem introdução.`;
 
   try{
     const response = await fetch(WORKER_URL, {
@@ -1562,7 +1585,7 @@ Escreva uma análise BEM curta e direta, em português do Brasil, com no máximo
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 350,
+        max_tokens: 450,
         messages: [{ role: "user", content: prompt }],
       })
     });
