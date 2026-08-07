@@ -379,6 +379,7 @@ function renderAnaliseIAItemizado(obj){
     { icon:'⚠️', label:'Ponto de atenção', texto: obj.pontoAtencao, color:'var(--amber)' },
     { icon:'💡', label:'Recomendação', texto: obj.recomendacao, color:'var(--pink)' },
     { icon:'🏆', label:'Meta', texto: obj.meta, color:'var(--blue)' },
+    { icon:'📈', label:'Padrão histórico', texto: obj.padraoHistorico, color:'var(--text-muted)' },
   ].filter(i => i.texto && i.texto.trim());
 
   resultEl.innerHTML = itens.map(i => `
@@ -392,7 +393,7 @@ function renderAnaliseIAItemizado(obj){
 function renderAnaliseIAFromCache(){
   const cached = analiseIACache[STORE];
   renderAnaliseIAItemizado(cached);
-  const textoConcat = cached ? [cached.fatorDominante, cached.pontoAtencao, cached.recomendacao, cached.meta].filter(Boolean).join(' ') : '';
+  const textoConcat = cached ? [cached.fatorDominante, cached.pontoAtencao, cached.recomendacao, cached.meta, cached.padraoHistorico].filter(Boolean).join(' ') : '';
   renderAnaliseIAMiniCharts(textoConcat);
 }
 
@@ -469,7 +470,7 @@ async function loadAllData(){
     rateSnap.docs.forEach(d=>{ CACHE.rateConfig[d.id] = d.data(); });
     aiSnap.docs.forEach(d=>{
       const v = d.data();
-      analiseIACache[d.id] = { fatorDominante:v.fatorDominante, pontoAtencao:v.pontoAtencao, recomendacao:v.recomendacao, meta:v.meta };
+      analiseIACache[d.id] = { fatorDominante:v.fatorDominante, pontoAtencao:v.pontoAtencao, recomendacao:v.recomendacao, meta:v.meta, padraoHistorico:v.padraoHistorico };
     });
   }catch(e){
     showToast('Erro ao carregar dados. Verifique sua conexão.');
@@ -1518,6 +1519,68 @@ function renderPlan(){
 }
 
 // ================= ANÁLISE (versão teste: só os gráficos juntos) =================
+const DIAS_SEMANA = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+function weekdayOf(dateStr){
+  return new Date(dateStr+'T00:00:00').getDay();
+}
+
+// Só ativa a memória histórica quando houver dado suficiente pra não "inventar" padrão de ruído.
+const HISTORICO_MIN_DIAS = 21; // ~3 semanas
+
+function computeHistoricoDados(){
+  const allDates = [...new Set(CACHE.dailyBusiness.filter(b=>b.store===STORE).map(b=>b.date))].sort();
+  if(allDates.length < HISTORICO_MIN_DIAS) return null;
+
+  const janela = allDates.slice(-60); // até 60 dias mais recentes
+  const exp = latestExpensesForStore(STORE);
+  const despesasFixas = despesasFixasTotal(exp);
+  const proLabore = exp ? (exp.proLabore||0) : 0;
+
+  let somaLucro=0, nLucro=0, somaTaxaConv=0, nTaxaConv=0;
+  const cppPorDiaSemana = {};
+
+  janela.forEach(d=>{
+    let vendas=0, pedidos=0, taxaConv=null;
+    bizForDate(STORE,d).forEach(b=>{ vendas+=(b.vendas||0); pedidos+=(b.pedidos||0); taxaConv=b.taxaConversao; });
+    const invest = adInvestForDate(STORE,d);
+    const despVar = autoDespesasTotal(autoDespesasForPeriod(STORE, pedidos, vendas));
+    const lucro = vendas - despesasFixas - despVar - invest - proLabore;
+    somaLucro += lucro; nLucro++;
+    if(taxaConv!=null){ somaTaxaConv += taxaConv; nTaxaConv++; }
+
+    const agg = aggregateAdsForDate(d);
+    if(agg && agg.cppGeral!=null){
+      const wd = weekdayOf(d);
+      if(!cppPorDiaSemana[wd]) cppPorDiaSemana[wd] = [];
+      cppPorDiaSemana[wd].push(agg.cppGeral);
+    }
+  });
+
+  const lucroMedioHistorico = nLucro ? somaLucro/nLucro : null;
+  const taxaConvMediaHistorico = nTaxaConv ? somaTaxaConv/nTaxaConv : null;
+
+  // Padrão por dia da semana: só considera dias com pelo menos 3 ocorrências, e só reporta desvio relevante (>=15%)
+  let padraoDiaSemanaTexto = null;
+  const todasCpps = Object.values(cppPorDiaSemana).flat();
+  if(todasCpps.length){
+    const cppMedioGeral = todasCpps.reduce((a,b)=>a+b,0)/todasCpps.length;
+    let maiorDesvio = null;
+    Object.keys(cppPorDiaSemana).forEach(wd=>{
+      const vals = cppPorDiaSemana[wd];
+      if(vals.length>=3){
+        const media = vals.reduce((a,b)=>a+b,0)/vals.length;
+        const delta = (media-cppMedioGeral)/cppMedioGeral*100;
+        if(Math.abs(delta)>=15 && (!maiorDesvio || Math.abs(delta)>maiorDesvio.abs)){
+          maiorDesvio = { abs:Math.abs(delta), texto:`${DIAS_SEMANA[wd]}: CPP historicamente ${Math.abs(delta).toFixed(0)}% ${delta>0?'mais alto':'mais baixo'} que a média (${vals.length} ocorrências)` };
+        }
+      }
+    });
+    if(maiorDesvio) padraoDiaSemanaTexto = maiorDesvio.texto;
+  }
+
+  return { janelaDias: janela.length, lucroMedioHistorico, taxaConvMediaHistorico, padraoDiaSemanaTexto };
+}
+
 function renderAnaliseCharts(){
   const lucroPoints = dailyLucroPointsForStore(STORE);
   const adsDates = last7Dates();
@@ -1554,7 +1617,8 @@ function renderAnaliseCharts(){
   }
 
   // guarda os dados brutos da janela pra montar o prompt da IA (os gráficos em si já existem nas abas Receita/ADS/Overview)
-  window._analiseDados = { lucroPoints, investPoints, cppPoints, pctAdsPoints, taxaConvPoints, ticketMedioPoints, pedidosPoints, planInfo, store: STORE };
+  const historico = computeHistoricoDados();
+  window._analiseDados = { lucroPoints, investPoints, cppPoints, pctAdsPoints, taxaConvPoints, ticketMedioPoints, pedidosPoints, planInfo, historico, store: STORE };
 
   const lastLucro = lucroPoints.length ? lucroPoints[lucroPoints.length-1].val : null;
   const lucroChartEl = document.getElementById('analiseLucroChart');
@@ -1588,6 +1652,14 @@ async function gerarAnaliseIA(){
     ? ' No campo "meta", uma frase conectando com a meta de lucro: diga se o investimento necessário calculado está próximo ou distante do investimento atual, e alerte que só aumentar investimento pode não resolver se o motor real da mudança (identificado em "fatorDominante") foi outro fator, não o ADS.'
     : ' Omita o campo "meta" (deixe como string vazia) — não há meta definida.';
 
+  const historicoTexto = dados.historico
+    ? `\n\nHistórico mais amplo (últimos ${dados.historico.janelaDias} dias, não só os últimos 7): Lucro líquido médio nesse período: R$ ${dados.historico.lucroMedioHistorico.toFixed(0)}${dados.historico.taxaConvMediaHistorico!=null?'; Taxa de conversão média: '+dados.historico.taxaConvMediaHistorico.toFixed(2)+'%':''}.${dados.historico.padraoDiaSemanaTexto ? ' Padrão identificado: '+dados.historico.padraoDiaSemanaTexto+'.' : ''}`
+    : '';
+
+  const instrucaoHistorico = dados.historico
+    ? ' No campo "padraoHistorico", compare o período atual (últimos 7 lançamentos) com a média histórica mais ampla informada acima — diga se o desempenho atual está acima, abaixo ou dentro do normal, e cite o padrão de dia da semana só se ele foi informado e for relevante pra decisão desta semana.'
+    : ' Omita o campo "padraoHistorico" (deixe como string vazia) — ainda não há histórico suficiente acumulado.';
+
   const prompt = `Você está analisando os dados de uma loja de capinhas de celular personalizadas na Shopee (loja: ${dados.store.toUpperCase()}), ao longo dos últimos lançamentos diários (cada lançamento reflete uma janela móvel de 7 dias, então compare a evolução ponto a ponto, não os dias como se fossem independentes).
 
 Dados (data: valor):
@@ -1597,7 +1669,7 @@ Dados (data: valor):
 - % de pedidos via ADS (o restante é orgânico): ${serie(dados.pctAdsPoints)}
 - Taxa de conversão (%): ${serie(dados.taxaConvPoints)}
 - Ticket médio (R$): ${serie(dados.ticketMedioPoints)}
-- Pedidos (contagem, também janela de 7 dias): ${serie(dados.pedidosPoints)}${metaTexto}
+- Pedidos (contagem, também janela de 7 dias): ${serie(dados.pedidosPoints)}${metaTexto}${historicoTexto}
 
 Responda SOMENTE com um objeto JSON válido, sem markdown, sem \`\`\`, sem texto antes ou depois, com exatamente estes campos (cada um é uma string curta, 1 frase, em português do Brasil, direto ao ponto, sem introdução, sem repetir todos os números da tabela — só os 2-3 mais relevantes, falando em termos de "sugere"/"parece" já que são poucos pontos de dado):
 
@@ -1605,9 +1677,10 @@ Responda SOMENTE com um objeto JSON válido, sem markdown, sem \`\`\`, sem texto
   "fatorDominante": "qual foi o fator dominante por trás da variação do lucro, com o número que sustenta isso",
   "pontoAtencao": "um ponto de atenção, se houver algum sinal indo na direção contrária ao esperado — string vazia se não houver nenhum",
   "recomendacao": "uma recomendação prática de ação. Se a variação de Pedidos parecer relevante, use o % de pedidos via ADS pra indicar se a mudança veio mais do tráfego pago ou do orgânico",
-  "meta": "string vazia, ou a frase sobre a meta conforme instrução abaixo"
+  "meta": "string vazia, ou a frase sobre a meta conforme instrução abaixo",
+  "padraoHistorico": "string vazia, ou a frase sobre o histórico conforme instrução abaixo"
 }
-${instrucaoMeta}`;
+${instrucaoMeta}${instrucaoHistorico}`;
 
   try{
     const response = await fetch(WORKER_URL, {
@@ -1630,11 +1703,12 @@ ${instrucaoMeta}`;
       pontoAtencao: parsed.pontoAtencao ? escapeHtml(String(parsed.pontoAtencao)) : '',
       recomendacao: parsed.recomendacao ? escapeHtml(String(parsed.recomendacao)) : '',
       meta: parsed.meta ? escapeHtml(String(parsed.meta)) : '',
+      padraoHistorico: parsed.padraoHistorico ? escapeHtml(String(parsed.padraoHistorico)) : '',
     };
     analiseIACache[dados.store] = obj;
     db.collection('aiAnalysis').doc(dados.store).set({ store: dados.store, ...obj, geradoEm: new Date().toISOString() }).catch(err=>console.error('Erro ao salvar análise no Firestore', err));
     renderAnaliseIAItemizado(obj);
-    renderAnaliseIAMiniCharts([obj.fatorDominante, obj.pontoAtencao, obj.recomendacao, obj.meta].filter(Boolean).join(' '));
+    renderAnaliseIAMiniCharts([obj.fatorDominante, obj.pontoAtencao, obj.recomendacao, obj.meta, obj.padraoHistorico].filter(Boolean).join(' '));
   }catch(e){
     console.error(e);
     resultEl.innerHTML = `<div class="empty">Erro ao gerar análise: ${escapeHtml(String(e.message||e))}</div>`;
