@@ -1688,7 +1688,7 @@ ${instrucaoMeta}${instrucaoHistorico}`;
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 450,
+        max_tokens: 700,
         messages: [{ role: "user", content: prompt }],
       })
     });
@@ -1696,7 +1696,13 @@ ${instrucaoMeta}${instrucaoHistorico}`;
     if(data.error){ throw new Error(typeof data.error==='string' ? data.error : JSON.stringify(data.error)); }
     const texto = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
     const jsonMatch = texto.match(/\{[\s\S]*\}/);
-    if(!jsonMatch) throw new Error('Resposta da IA não veio em formato reconhecível.');
+    if(!jsonMatch){
+      // Resposta não veio em JSON (ex: cortada por limite de tokens) — mostra o texto bruto em vez de falhar de vez.
+      const obj = { fatorDominante: texto ? escapeHtml(texto) : 'Não foi possível gerar a análise agora. Tente de novo.', pontoAtencao:'', recomendacao:'', meta:'', padraoHistorico:'' };
+      analiseIACache[dados.store] = obj;
+      renderAnaliseIAItemizado(obj);
+      return;
+    }
     const parsed = JSON.parse(jsonMatch[0]);
     const obj = {
       fatorDominante: parsed.fatorDominante ? escapeHtml(String(parsed.fatorDominante)) : '',
