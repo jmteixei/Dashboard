@@ -322,15 +322,35 @@
 
   <!-- ============ ANÁLISE (teste) ============ -->
   <div id="view-analise" class="view">
-    <div class="alert-box" style="--status-color:var(--amber);margin-bottom:10px;">⚠️ O valor das vendas de pedidos pagos pode sofrer alterações em função de cancelamentos. Para mais detalhes consulte a aba Retorno e Pedidos Cancelados/Cancelamentos na Shopee.</div>
-    <div class="alert-box" style="--status-color:var(--amber);margin-bottom:16px;">⚠️ Além das despesas fixas e variáveis, podem ocorrer outras despesas com diferenças de frete, reembolsos por devoluções e outras. Para mais detalhes consulte o extrato dos lançamentos em sua conta Shopee na aba Finanças/Saldo da Carteira.</div>
+    <div class="seg" id="analiseSwitcher">
+      <button data-as="c4a" class="active" onclick="setAnaliseSub('c4a')">C4A</button>
+      <button data-as="c2u" onclick="setAnaliseSub('c2u')">C2U</button>
+      <button data-as="comparacao" onclick="setAnaliseSub('comparacao')">Comparação</button>
+    </div>
 
-    <div id="analiseLucroChart"></div>
+    <div id="analise-sub-loja">
+      <div class="alert-box" style="--status-color:var(--amber);margin-bottom:10px;">⚠️ O valor das vendas de pedidos pagos pode sofrer alterações em função de cancelamentos. Para mais detalhes consulte a aba Retorno e Pedidos Cancelados/Cancelamentos na Shopee.</div>
+      <div class="alert-box" style="--status-color:var(--amber);margin-bottom:16px;">⚠️ Além das despesas fixas e variáveis, podem ocorrer outras despesas com diferenças de frete, reembolsos por devoluções e outras. Para mais detalhes consulte o extrato dos lançamentos em sua conta Shopee na aba Finanças/Saldo da Carteira.</div>
 
-    <div class="section-title">Análise (IA)</div>
-    <button class="btn" onclick="gerarAnaliseIA()" id="analiseIABtn">Gerar análise</button>
-    <div class="card-block" id="analiseIAResult" style="margin-top:12px;"></div>
-    <div id="analiseIAMiniCharts"></div>
+      <div id="analiseLucroChart"></div>
+
+      <div class="section-title">Análise (IA)</div>
+      <button class="btn" onclick="gerarAnaliseIA()" id="analiseIABtn">Gerar análise</button>
+      <div class="card-block" id="analiseIAResult" style="margin-top:12px;"></div>
+      <div id="analiseIAMiniCharts"></div>
+    </div>
+
+    <div id="analise-sub-comparacao" style="display:none;">
+      <div class="section-title">Lucro líquido — C4A x C2U</div>
+      <div class="card-block" id="comparacaoChart"></div>
+
+      <div class="section-title">Comparativo (últimos lançamentos)</div>
+      <div class="card-block" id="comparacaoTabela"></div>
+
+      <div class="section-title">Análise (IA)</div>
+      <button class="btn" onclick="gerarComparacaoIA()" id="comparacaoIABtn">Gerar comparação</button>
+      <div class="card-block" id="comparacaoIAResult" style="margin-top:12px;"></div>
+    </div>
   </div>
 
 </div>
@@ -361,6 +381,7 @@ const db = firebase.firestore();
 // ---------- Global state ----------
 let STORE = 'c4a';
 let PAINEL_VIEW = 'c4a';
+let ANALISE_SUB = 'c4a';
 let expandedAdId = null;
 let editingAdId = null;
 
@@ -505,12 +526,12 @@ function switchView(name){
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('.tabbar button').forEach(b=>b.classList.remove('active'));
   document.querySelector(`.tabbar button[data-view="${name}"]`).classList.add('active');
-  document.getElementById('storeSwitcher').style.display = (name==='overview') ? 'none' : 'flex';
+  document.getElementById('storeSwitcher').style.display = (name==='overview' || name==='analise') ? 'none' : 'flex';
   if(name==='receita') loadReceitaForm();
   if(name==='despesas'){ loadExpensesForm(); renderExpensesHistory(); renderAutoDespesasBlock(); }
   if(name==='ads'){ renderAdSelect(); loadEntryFormForSelection(); renderResumo(); renderAdsPainel(); renderAdManageList(); }
   if(name==='overview') renderPainel();
-  if(name==='analise'){ renderAnaliseCharts(); renderAnaliseIAFromCache(); }
+  if(name==='analise') setAnaliseSub(ANALISE_SUB);
 }
 
 function setDespesasSub(name){
@@ -522,7 +543,9 @@ function setDespesasSub(name){
 
 function setStore(s){
   STORE = s;
+  ANALISE_SUB = s;
   document.querySelectorAll('#storeSwitcher button').forEach(b=>b.classList.toggle('active', b.dataset.store===s));
+  document.querySelectorAll('#analiseSwitcher button').forEach(b=>b.classList.toggle('active', b.dataset.as===s));
   loadReceitaForm();
   renderAdSelect();
   loadEntryFormForSelection();
@@ -1579,6 +1602,191 @@ function computeHistoricoDados(){
   }
 
   return { janelaDias: janela.length, lucroMedioHistorico, taxaConvMediaHistorico, padraoDiaSemanaTexto };
+}
+
+function setAnaliseSub(sub){
+  ANALISE_SUB = sub;
+  document.querySelectorAll('#analiseSwitcher button').forEach(b=>b.classList.toggle('active', b.dataset.as===sub));
+  if(sub==='comparacao'){
+    document.getElementById('analise-sub-loja').style.display = 'none';
+    document.getElementById('analise-sub-comparacao').style.display = 'block';
+    renderComparacao();
+  } else {
+    document.getElementById('analise-sub-loja').style.display = 'block';
+    document.getElementById('analise-sub-comparacao').style.display = 'none';
+    if(STORE !== sub) setStore(sub); else { renderAnaliseCharts(); renderAnaliseIAFromCache(); }
+  }
+}
+
+// Mini-função pra pegar um "retrato atual" de cada loja, reaproveitando o que a Análise por loja já calcula.
+function snapshotLojaParaComparacao(store){
+  const dates = [...new Set(CACHE.dailyBusiness.filter(b=>b.store===store).map(b=>b.date))].sort();
+  if(dates.length===0) return null;
+  const d = dates[dates.length-1];
+  let vendas=0, pedidos=0, taxaConv=null;
+  bizForDate(store,d).forEach(b=>{ vendas+=(b.vendas||0); pedidos+=(b.pedidos||0); taxaConv=b.taxaConversao; });
+  const exp = latestExpensesForStore(store);
+  const despesasFixas = despesasFixasTotal(exp);
+  const proLabore = exp ? (exp.proLabore||0) : 0;
+  const despesasVariaveis = autoDespesasTotal(autoDespesasForPeriod(store, pedidos, vendas));
+  const invest = adInvestForDate(store,d);
+  const lucro = vendas - despesasFixas - despesasVariaveis - invest - proLabore;
+  const margem = vendas ? (lucro/vendas*100) : null;
+  const despVarPct = vendas ? (despesasVariaveis/vendas*100) : null;
+
+  const adsDates = [...new Set(CACHE.adEntries.filter(e=>e.store===store).map(e=>e.date))].sort();
+  const adsD = adsDates.length ? adsDates[adsDates.length-1] : null;
+  const agg = adsD ? aggregateAdsForDateStore2(store, adsD) : null;
+
+  return {
+    date:d, vendas, pedidos, taxaConv, lucro, margem, despVarPct,
+    cpp: agg ? agg.cppGeral : null,
+    pctAds: (agg && pedidos) ? (agg.pedidos/pedidos*100) : null,
+  };
+}
+function aggregateAdsForDateStore2(store, dateStr){
+  const dayEntries = CACHE.adEntries.filter(e=>e.store===store && e.date===dateStr);
+  if(dayEntries.length===0) return null;
+  let investimento=0, vendas=0, pedidos=0;
+  dayEntries.forEach(e=>{ investimento+=e.investimento; vendas+=vendasDe(e); pedidos+=e.conversoes; });
+  return { cppGeral: pedidos?investimento/pedidos:null, roasGeral: investimento?vendas/investimento:null, pedidos };
+}
+
+function renderComparacao(){
+  const c4a = snapshotLojaParaComparacao('c4a');
+  const c2u = snapshotLojaParaComparacao('c2u');
+
+  // gráfico sobreposto
+  const chartEl = document.getElementById('comparacaoChart');
+  const c4aPoints = dailyLucroPointsForStore('c4a');
+  const c2uPoints = dailyLucroPointsForStore('c2u');
+  chartEl.innerHTML = sparklineDuplo(c4aPoints, c2uPoints, 'var(--pink)', 'var(--teal)', 'C4A', 'C2U');
+
+  // tabela comparativa
+  const tabEl = document.getElementById('comparacaoTabela');
+  const fmt = (v,prefix='',suffix='',dec=1) => v==null ? '—' : prefix+v.toFixed(dec)+suffix;
+  const linhas = [
+    ['Lucro líquido', fmt(c4a&&c4a.lucro,'R$ ','',0), fmt(c2u&&c2u.lucro,'R$ ','',0)],
+    ['Margem líquida', fmt(c4a&&c4a.margem,'','%'), fmt(c2u&&c2u.margem,'','%')],
+    ['CPP geral', fmt(c4a&&c4a.cpp,'R$ ','',2), fmt(c2u&&c2u.cpp,'R$ ','',2)],
+    ['Taxa de conversão', fmt(c4a&&c4a.taxaConv,'','%',2), fmt(c2u&&c2u.taxaConv,'','%',2)],
+    ['% pedidos via ADS', fmt(c4a&&c4a.pctAds,'','%'), fmt(c2u&&c2u.pctAds,'','%')],
+    ['Despesas variáveis (% vendas)', fmt(c4a&&c4a.despVarPct,'','%'), fmt(c2u&&c2u.despVarPct,'','%')],
+  ];
+  tabEl.innerHTML = `
+    <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:4px;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.03em;margin-bottom:6px;">
+      <span></span><span style="text-align:right;">C4A</span><span style="text-align:right;">C2U</span>
+    </div>
+    ${linhas.map(([k,a,b])=>`
+      <div class="metric-row" style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:4px;">
+        <span class="k">${k}</span><span class="v mono" style="text-align:right;">${a}</span><span class="v mono" style="text-align:right;">${b}</span>
+      </div>
+    `).join('')}
+  `;
+
+  window._comparacaoDados = { c4a, c2u };
+}
+
+function sparklineDuplo(pointsA, pointsB, colorA, colorB, labelA, labelB){
+  const validA = pointsA.filter(p=>p.val!=null);
+  const validB = pointsB.filter(p=>p.val!=null);
+  if(validA.length<2 && validB.length<2){
+    return '<div class="empty">Aguardando mais dados nas duas lojas.</div>';
+  }
+  const w=280, h=80, padX=6, padY=10;
+  const allVals = [...validA, ...validB].map(p=>p.val);
+  const min = Math.min(...allVals), max = Math.max(...allVals);
+  const range = (max-min) || Math.max(1, Math.abs(max)*0.1) || 1;
+  const allLabels = [...new Set([...pointsA.map(p=>p.label), ...pointsB.map(p=>p.label)])].sort();
+
+  function pathFor(points, color){
+    const valid = points.filter(p=>p.val!=null);
+    if(valid.length<2) return '';
+    const coords = valid.map(p=>{
+      const idx = allLabels.indexOf(p.label);
+      const x = padX + (idx/(allLabels.length-1||1)) * (w - padX*2);
+      const y = padY + (1 - (p.val-min)/range) * (h - padY*2);
+      return {x,y};
+    });
+    const d = coords.map((c,i)=>(i===0?'M':'L')+c.x.toFixed(1)+','+c.y.toFixed(1)).join(' ');
+    const dots = coords.map(c=>`<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="2.6" fill="${color}"/>`).join('');
+    return `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}`;
+  }
+
+  return `
+    <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" style="display:block;">
+      ${pathFor(pointsA, colorA)}
+      ${pathFor(pointsB, colorB)}
+    </svg>
+    <div style="display:flex;justify-content:center;gap:16px;font-size:11px;margin-top:6px;">
+      <span style="color:${colorA};">● ${labelA}</span>
+      <span style="color:${colorB};">● ${labelB}</span>
+    </div>
+  `;
+}
+
+async function gerarComparacaoIA(){
+  const btn = document.getElementById('comparacaoIABtn');
+  const resultEl = document.getElementById('comparacaoIAResult');
+  const dados = window._comparacaoDados;
+  if(!dados || (!dados.c4a && !dados.c2u)){ showToast('Aguarde os dados carregarem.'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Comparando...';
+  resultEl.innerHTML = '<div class="empty">Gerando comparação, aguarde alguns segundos...</div>';
+
+  const descreve = (nome, s) => s ? `${nome}: Lucro R$ ${s.lucro.toFixed(0)}, Margem ${s.margem!=null?s.margem.toFixed(1)+'%':'sem dado'}, CPP ${s.cpp!=null?'R$ '+s.cpp.toFixed(2):'sem dado'}, Taxa de conversão ${s.taxaConv!=null?s.taxaConv.toFixed(2)+'%':'sem dado'}, % pedidos via ADS ${s.pctAds!=null?s.pctAds.toFixed(1)+'%':'sem dado'}, Despesas variáveis ${s.despVarPct!=null?s.despVarPct.toFixed(1)+'% das vendas':'sem dado'}.` : `${nome}: sem dados suficientes ainda.`;
+
+  const prompt = `Compare o desempenho de duas lojas de capinhas de celular personalizadas na Shopee, ambas do mesmo dono, usando os dados mais recentes de cada uma (cada métrica já reflete uma janela móvel de 7 dias):
+
+${descreve('C4A', dados.c4a)}
+${descreve('C2U', dados.c2u)}
+
+Responda SOMENTE com um objeto JSON válido, sem markdown, sem \`\`\`, sem texto antes ou depois, com estes campos (strings curtas, 1 frase cada, português do Brasil, direto ao ponto):
+
+{
+  "melhorDesempenho": "qual loja está performando melhor em termos de lucratividade/margem, e por quê, citando o número mais relevante",
+  "diferencaEstrutural": "a principal diferença estrutural entre as duas (ex: dependência de ADS, eficiência de conversão, estrutura de custo) que explica a diferença de resultado",
+  "oportunidade": "uma sugestão prática de algo que a loja com pior desempenho poderia aprender ou replicar da com melhor desempenho, sendo realista sobre as diferenças de escala/produto entre elas"
+}`;
+
+  try{
+    const response = await fetch(WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 600,
+        messages: [{ role: "user", content: prompt }],
+      })
+    });
+    const data = await response.json();
+    if(data.error){ throw new Error(typeof data.error==='string' ? data.error : JSON.stringify(data.error)); }
+    const texto = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+    const jsonMatch = texto.match(/\{[\s\S]*\}/);
+    if(!jsonMatch){
+      resultEl.innerHTML = `<div style="font-size:13px;line-height:1.6;">${escapeHtml(texto)}</div>`;
+      return;
+    }
+    const parsed = JSON.parse(jsonMatch[0]);
+    const itens = [
+      { icon:'🏆', label:'Melhor desempenho', texto: parsed.melhorDesempenho, color:'var(--teal)' },
+      { icon:'🔍', label:'Diferença estrutural', texto: parsed.diferencaEstrutural, color:'var(--blue)' },
+      { icon:'💡', label:'Oportunidade', texto: parsed.oportunidade, color:'var(--pink)' },
+    ].filter(i=>i.texto && String(i.texto).trim());
+    resultEl.innerHTML = itens.map(i => `
+      <div class="alert-box" style="--status-color:${i.color};margin-bottom:8px;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:${i.color};font-weight:600;margin-bottom:4px;">${i.icon} ${i.label}</div>
+        <div style="font-size:13px;line-height:1.5;">${escapeHtml(String(i.texto))}</div>
+      </div>
+    `).join('');
+  }catch(e){
+    console.error(e);
+    resultEl.innerHTML = `<div class="empty">Erro ao gerar comparação: ${escapeHtml(String(e.message||e))}</div>`;
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Gerar comparação';
+  }
 }
 
 function renderAnaliseCharts(){
